@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teletalk Jobs Filler</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-shell">
+    <!-- Header -->
+    <header class="popup-header">
+      <div class="brand">
+        <img src="icons/icon48.png" alt="Teletalk Jobs Filler Logo" class="brand-logo">
+        <div class="brand-text">
+          <h1>Teletalk Jobs Filler</h1>
+          <p class="subtitle">BD Govt. Job Autofill Assistant</p>
+        </div>
+      </div>
+      <span id="siteBadge" class="site-badge badge-neutral" title="Current tab status">Checking...</span>
+    </header>
+
+    <!-- Profile Switcher Card -->
+    <section class="card profile-card">
+      <div class="card-row">
+        <label for="profileSwitcher" class="field-label">Active Applicant Profile</label>
+        <span id="fieldCountBadge" class="count-pill">0 fields</span>
+      </div>
+      <div class="select-wrap">
+        <select id="profileSwitcher" class="profile-select" aria-label="Select Applicant Profile"></select>
+      </div>
+      <div id="profileSummary" class="profile-summary">
+        <span class="summary-muted">Loading profile...</span>
+      </div>
+    </section>
+
+    <!-- Status Banner -->
+    <div id="statusBanner" class="status-banner hidden" role="status" aria-live="polite"></div>
+
+    <!-- Primary Actions -->
+    <section class="actions-stack">
+      <button type="button" id="btnAutofill" class="btn btn-primary">
+        <span class="btn-icon">⚡</span>
+        <span>Auto Fill Current Form</span>
+      </button>
+
+      <button type="button" id="btnOpenOptions" class="btn btn-secondary">
+        <span class="btn-icon">⚙️</span>
+        <span>Edit / Manage Saved Data</span>
+      </button>
+    </section>
+
+    <!-- Backup & Restore Row -->
+    <section class="backup-section">
+      <div class="backup-grid">
+        <button type="button" id="btnExport" class="btn btn-outline" title="Download all profiles as a JSON backup file">
+          <span>📤 Export Backup (JSON)</span>
+        </button>
+        <button type="button" id="btnImport" class="btn btn-outline" title="Restore profiles from a JSON backup file">
+          <span>📥 Import Backup</span>
+        </button>
+      </div>
+
+      <!-- Safe Popup Import Drawer (Avoids Chrome closing popup on native file picker) -->
+      <div id="importDrawer" class="import-drawer hidden">
+        <div id="dropZone" class="drop-zone" tabindex="0">
+          <p class="drop-title">Drop your <code>.json</code> backup file here</p>
+          <p class="drop-sub">or choose a file safely in the full dashboard</p>
+        </div>
+        <div class="import-drawer-actions">
+          <button type="button" id="btnBrowseInTab" class="btn btn-small btn-primary">📂 Choose .json File</button>
+          <button type="button" id="btnCloseImport" class="btn btn-small btn-ghost">Cancel</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer Hint -->
+    <footer class="popup-footer">
+      <span>100% local &amp; private • Stored on your device</span>
+      <span class="version-tag">v1.0.0</span>
+    </footer>
+  </div>
+
+  <script src="teletalk-data.js"></script>
+  <script src="storage.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
