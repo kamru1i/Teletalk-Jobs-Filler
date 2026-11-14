@@ -591,6 +591,114 @@ kbd {
   margin-top: 4px;
 }
 
+/* Job Experiences & Other Qualifications */
+.full-width {
+  grid-column: 1 / -1;
+}
+
+.job-exp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.job-exp-item {
+  border: 1.5px solid var(--slate-200);
+  border-radius: 10px;
+  background: var(--slate-50);
+  padding: 16px;
+}
+
+.job-exp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--slate-200);
+}
+
+.job-exp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--emerald-800);
+}
+
+.job-exp-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--emerald-700);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.job-exp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.date-range-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.date-range-sep {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--slate-500);
+}
+
+.currently-working-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--slate-700);
+  cursor: pointer;
+  user-select: none;
+}
+
+.currently-working-inline input[type="checkbox"] {
+  accent-color: var(--emerald-600);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+.desc-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.char-counter {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--slate-500);
+  font-variant-numeric: tabular-nums;
+}
+
+.char-counter.near-limit {
+  color: #d97706;
+}
+
 /* Responsive */
 @media (max-width: 860px) {
   .two-col,

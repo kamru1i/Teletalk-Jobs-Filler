@@ -79,6 +79,7 @@
       <button type="button" class="tab-btn" data-tab="basic">1. Basic Information</button>
       <button type="button" class="tab-btn" data-tab="address">2. Address Information</button>
       <button type="button" class="tab-btn" data-tab="education">3. Educational Qualifications</button>
+      <button type="button" class="tab-btn" data-tab="experience">4. Job &amp; Other Experiences</button>
     </nav>
 
     <form id="profileForm" novalidate>
@@ -565,6 +566,68 @@
             <div class="form-group">
               <label for="mas_duration">Course Duration</label>
               <select id="mas_duration" class="form-control"></select>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 4: JOB EXPERIENCES & OTHER QUALIFICATIONS -->
+      <section class="section-panel edu-stack" data-section="experience">
+        <!-- Job Experiences -->
+        <div class="form-card" id="cardJobExperience">
+          <div class="card-header">
+            <div>
+              <h2>4A. Job Experiences (চাকরির অভিজ্ঞতা)</h2>
+              <p class="card-sub">Fill only if you want to enter prior/current job history when a circular includes Job Experiences.</p>
+            </div>
+            <label class="checkbox-pill" for="exp_applicable">
+              <input type="checkbox" id="exp_applicable">
+              <span>If Applicable</span>
+            </label>
+          </div>
+
+          <div class="card-body" id="expFieldsWrap">
+            <div id="jobExpList" class="job-exp-list"></div>
+            <div class="job-exp-actions">
+              <button type="button" id="btnAddJobExp" class="btn btn-outline">+ Add Another Job Experience</button>
+              <span class="field-hint">Tip: Extension automatically clicks Teletalk's "+ ADD MORE" button when multiple jobs are saved.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Other Qualifications / Experiences -->
+        <div class="form-card" id="cardOtherExperience">
+          <div class="card-header">
+            <div>
+              <h2>4B. Other Qualifications / Experiences</h2>
+              <p class="card-sub">Answers circular-specific questions such as Computer Proficiency &amp; Relevant Work Experience.</p>
+            </div>
+            <span class="badge-tag">Circular Specific</span>
+          </div>
+
+          <div class="card-body form-grid two-col">
+            <div class="form-group full-width">
+              <label for="other_computer_proficiency">1) Do you have Proficiency in Operating a Computer, along with working in a Relevant field?</label>
+              <select id="other_computer_proficiency" class="form-control"></select>
+              <span class="field-hint">Directly matches Teletalk's computer proficiency &amp; relevant experience question when shown on the form.</span>
+            </div>
+
+            <div class="form-group">
+              <label for="other_typing_speed">Typing / Shorthand Speed Requirement <span class="opt-label">(Optional)</span></label>
+              <select id="other_typing_speed" class="form-control"></select>
+              <span class="field-hint">Used when a circular asks about Computer/Bangla-English Typing or Stenographer speed.</span>
+            </div>
+
+            <div class="form-group">
+              <label for="other_default_response">Fallback Answer for Other Questions <span class="opt-label">(Optional)</span></label>
+              <select id="other_default_response" class="form-control"></select>
+              <span class="field-hint">Optional Yes/No fallback for other circular-specific qualification dropdowns.</span>
+            </div>
+
+            <div class="form-group full-width">
+              <label for="other_exp_details">Additional Experience / Certificate Details <span class="opt-label">(If Asked)</span></label>
+              <input type="text" id="other_exp_details" class="form-control" maxlength="200" placeholder="e.g. MS Office / Typing Speed / Relevant Certificate details">
+              <span class="field-hint">Autofilled automatically if selecting "Yes" reveals a follow-up text box on the portal.</span>
             </div>
           </div>
         </div>

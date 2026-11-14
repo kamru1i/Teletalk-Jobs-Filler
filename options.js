@@ -84,6 +84,10 @@
     graFieldsWrap: document.getElementById('graFieldsWrap'),
     mas_applicable: document.getElementById('mas_applicable'),
     masFieldsWrap: document.getElementById('masFieldsWrap'),
+    exp_applicable: document.getElementById('exp_applicable'),
+    expFieldsWrap: document.getElementById('expFieldsWrap'),
+    jobExpList: document.getElementById('jobExpList'),
+    btnAddJobExp: document.getElementById('btnAddJobExp'),
     tabButtons: Array.from(document.querySelectorAll('.tab-btn')),
     sectionPanels: Array.from(document.querySelectorAll('.section-panel'))
   };
@@ -112,8 +116,7 @@
     els.unsavedBadge.classList.toggle('hidden', !isDirty);
   }
 
-  function populateSelect(selectId, items, selectedValue = '', placeholder = 'Select') {
-    const sel = document.getElementById(selectId);
+  function populateSelectElement(sel, items, selectedValue = '', placeholder = 'Select') {
     if (!sel) return;
     sel.innerHTML = '';
 
@@ -144,6 +147,10 @@
     } else {
       sel.value = '';
     }
+  }
+
+  function populateSelect(selectId, items, selectedValue = '', placeholder = 'Select') {
+    populateSelectElement(document.getElementById(selectId), items, selectedValue, placeholder);
   }
 
   function initializeStaticDropdowns() {
@@ -186,6 +193,230 @@
     populateSelect('mas_result_type', TD.MAS_RESULT_TYPES);
     populateSelect('mas_year', TD.PASSING_YEARS);
     populateSelect('mas_duration', TD.MAS_DURATIONS);
+
+    populateSelect('other_computer_proficiency', TD.YES_NO, '', 'Select');
+    populateSelect('other_typing_speed', TD.YES_NO, '', 'Select');
+    populateSelect('other_default_response', TD.YES_NO, '', 'Leave empty (Do not auto-answer)');
+  }
+
+  function updateJobCardCounter(textarea, counterEl) {
+    if (!textarea || !counterEl) return;
+    const len = String(textarea.value || '').length;
+    counterEl.textContent = `${len} / 300`;
+    counterEl.classList.toggle('near-limit', len >= 270);
+  }
+
+  function buildJobFormGroup(labelText, controlEl, extraClass = '') {
+    const group = document.createElement('div');
+    group.className = extraClass ? `form-group ${extraClass}` : 'form-group';
+    const label = document.createElement('label');
+    label.textContent = labelText;
+    group.appendChild(label);
+    group.appendChild(controlEl);
+    return group;
+  }
+
+  function collectJobExperiences() {
+    if (!els.jobExpList) return [{ ...Storage.DEFAULT_JOB_EXPERIENCE_ITEM }];
+    const items = Array.from(els.jobExpList.querySelectorAll('.job-exp-item'));
+    if (!items.length) return [{ ...Storage.DEFAULT_JOB_EXPERIENCE_ITEM }];
+
+    return items.map((card) => {
+      const rawItem = {};
+      for (const fieldEl of card.querySelectorAll('[data-job-field]')) {
+        const key = fieldEl.dataset.jobField;
+        if (!key) continue;
+        if (fieldEl.type === 'checkbox') {
+          rawItem[key] = Boolean(fieldEl.checked);
+        } else {
+          rawItem[key] = String(fieldEl.value || '').trim();
+        }
+      }
+      return Storage.normalizeJobExperienceItem(rawItem);
+    });
+  }
+
+  function createJobExperienceCard(job, index, totalCount) {
+    const norm = Storage.normalizeJobExperienceItem(job);
+    const card = document.createElement('div');
+    card.className = 'job-exp-item';
+    card.dataset.jobIndex = String(index);
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'job-exp-header';
+
+    const badge = document.createElement('div');
+    badge.className = 'job-exp-badge';
+    const numSpan = document.createElement('span');
+    numSpan.className = 'job-exp-index';
+    numSpan.textContent = String(index + 1);
+    const titleSpan = document.createElement('span');
+    titleSpan.textContent = `Job Experience #${index + 1}`;
+    badge.appendChild(numSpan);
+    badge.appendChild(titleSpan);
+    header.appendChild(badge);
+
+    if (totalCount > 1) {
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'btn btn-danger-outline btn-sm';
+      removeBtn.textContent = 'Remove';
+      removeBtn.addEventListener('click', () => {
+        const jobs = collectJobExperiences();
+        jobs.splice(index, 1);
+        renderJobExperiences(jobs);
+        refreshConditionalVisibility();
+        setDirty(true);
+      });
+      header.appendChild(removeBtn);
+    }
+    card.appendChild(header);
+
+    const grid = document.createElement('div');
+    grid.className = 'form-grid two-col';
+
+    // Employed on
+    const empSelect = document.createElement('select');
+    empSelect.className = 'form-control';
+    empSelect.dataset.jobField = 'employment_type';
+    populateSelectElement(empSelect, TD.EMPLOYMENT_TYPES, norm.employment_type, 'Select Employment Type');
+    grid.appendChild(buildJobFormGroup('Employed on', empSelect));
+
+    // Organization
+    const orgInput = document.createElement('input');
+    orgInput.type = 'text';
+    orgInput.className = 'form-control';
+    orgInput.maxLength = 100;
+    orgInput.placeholder = 'e.g. Company / Organization Name';
+    orgInput.dataset.jobField = 'organization';
+    orgInput.value = norm.organization;
+    grid.appendChild(buildJobFormGroup('Organization', orgInput));
+
+    // Designation / Post
+    const desInput = document.createElement('input');
+    desInput.type = 'text';
+    desInput.className = 'form-control';
+    desInput.maxLength = 50;
+    desInput.placeholder = 'e.g. IT Officer / Assistant Manager';
+    desInput.dataset.jobField = 'designation';
+    desInput.value = norm.designation;
+    grid.appendChild(buildJobFormGroup('Designation / Post', desInput));
+
+    // Office Address
+    const addrInput = document.createElement('input');
+    addrInput.type = 'text';
+    addrInput.className = 'form-control';
+    addrInput.maxLength = 100;
+    addrInput.placeholder = 'Office Street, Road, Area, District';
+    addrInput.dataset.jobField = 'office_address';
+    addrInput.value = norm.office_address;
+    grid.appendChild(buildJobFormGroup('Office Address', addrInput));
+
+    // Length of Service + Currently Working
+    const serviceWrap = document.createElement('div');
+    serviceWrap.className = 'form-group';
+    const serviceLabel = document.createElement('label');
+    serviceLabel.textContent = 'Length of Service';
+    serviceWrap.appendChild(serviceLabel);
+
+    const dateRow = document.createElement('div');
+    dateRow.className = 'date-range-row';
+
+    const startInput = document.createElement('input');
+    startInput.type = 'date';
+    startInput.className = 'form-control';
+    startInput.dataset.jobField = 'job_start_date';
+    startInput.value = norm.job_start_date;
+
+    const toSpan = document.createElement('span');
+    toSpan.className = 'date-range-sep';
+    toSpan.textContent = 'to';
+
+    const endInput = document.createElement('input');
+    endInput.type = 'date';
+    endInput.className = 'form-control';
+    endInput.dataset.jobField = 'job_end_date';
+    endInput.value = norm.job_end_date;
+
+    dateRow.appendChild(startInput);
+    dateRow.appendChild(toSpan);
+    dateRow.appendChild(endInput);
+    serviceWrap.appendChild(dateRow);
+
+    const cwLabel = document.createElement('label');
+    cwLabel.className = 'currently-working-inline';
+    const cwCheck = document.createElement('input');
+    cwCheck.type = 'checkbox';
+    cwCheck.dataset.jobField = 'currently_working';
+    cwCheck.checked = norm.currently_working;
+    cwCheck.addEventListener('change', refreshConditionalVisibility);
+    const cwText = document.createElement('span');
+    cwText.textContent = 'Currently Working';
+    cwLabel.appendChild(cwCheck);
+    cwLabel.appendChild(cwText);
+    serviceWrap.appendChild(cwLabel);
+    grid.appendChild(serviceWrap);
+
+    // Optional Last Drawn Salary
+    const salaryInput = document.createElement('input');
+    salaryInput.type = 'text';
+    salaryInput.className = 'form-control';
+    salaryInput.maxLength = 30;
+    salaryInput.placeholder = 'Optional (e.g. 35000)';
+    salaryInput.dataset.jobField = 'last_salary';
+    salaryInput.value = norm.last_salary;
+    const salaryGroup = buildJobFormGroup('Last Drawn Salary (Optional)', salaryInput);
+    const salaryHint = document.createElement('span');
+    salaryHint.className = 'field-hint';
+    salaryHint.textContent = 'Filled automatically only if the portal displays a salary field.';
+    salaryGroup.appendChild(salaryHint);
+    grid.appendChild(salaryGroup);
+
+    // Job Description
+    const descGroup = document.createElement('div');
+    descGroup.className = 'form-group full-width';
+    const descLabel = document.createElement('label');
+    descLabel.textContent = 'Job Description';
+    descGroup.appendChild(descLabel);
+
+    const descTextarea = document.createElement('textarea');
+    descTextarea.className = 'form-control';
+    descTextarea.rows = 3;
+    descTextarea.maxLength = 300;
+    descTextarea.placeholder = 'Short summary of duties and responsibilities (max 300 characters)';
+    descTextarea.dataset.jobField = 'job_description';
+    descTextarea.value = norm.job_description;
+    descGroup.appendChild(descTextarea);
+
+    const metaRow = document.createElement('div');
+    metaRow.className = 'desc-meta-row';
+    const descHint = document.createElement('span');
+    descHint.className = 'field-hint';
+    descHint.textContent = 'Teletalk limits Job Description to 300 characters and blocks paste — our extension fills it safely.';
+    const counter = document.createElement('span');
+    counter.className = 'char-counter';
+    updateJobCardCounter(descTextarea, counter);
+    descTextarea.addEventListener('input', () => updateJobCardCounter(descTextarea, counter));
+    metaRow.appendChild(descHint);
+    metaRow.appendChild(counter);
+    descGroup.appendChild(metaRow);
+    grid.appendChild(descGroup);
+
+    card.appendChild(grid);
+    return card;
+  }
+
+  function renderJobExperiences(jobs) {
+    if (!els.jobExpList) return;
+    const list = Array.isArray(jobs) && jobs.length > 0
+      ? jobs.map(Storage.normalizeJobExperienceItem)
+      : [{ ...Storage.DEFAULT_JOB_EXPERIENCE_ITEM }];
+
+    els.jobExpList.innerHTML = '';
+    list.forEach((job, idx) => {
+      els.jobExpList.appendChild(createJobExperienceCard(job, idx, list.length));
+    });
   }
 
   function updateUpazilaDropdown(districtSelectId, upazilaSelectId, selectedUpazila = '') {
@@ -264,6 +495,24 @@
       const field = document.getElementById(id);
       if (field) field.disabled = !masOn;
     }
+
+    // Job Experiences If Applicable toggle
+    if (els.exp_applicable && els.expFieldsWrap) {
+      const expOn = els.exp_applicable.checked;
+      els.expFieldsWrap.classList.toggle('section-disabled', !expOn);
+      for (const ctrl of els.expFieldsWrap.querySelectorAll('input, select, textarea, button')) {
+        ctrl.disabled = !expOn;
+      }
+      if (expOn && els.jobExpList) {
+        for (const card of els.jobExpList.querySelectorAll('.job-exp-item')) {
+          const cw = card.querySelector('[data-job-field="currently_working"]');
+          const endInput = card.querySelector('[data-job-field="job_end_date"]');
+          if (cw && endInput) {
+            endInput.disabled = cw.checked;
+          }
+        }
+      }
+    }
   }
 
   function syncPresentToPermanent() {
@@ -306,7 +555,13 @@
     updateUpazilaDropdown('permanent_district', 'permanent_upazila', data.permanent_upazila || '');
 
     for (const key of Object.keys(Storage.DEFAULT_PROFILE_DATA)) {
-      if (key === 'present_district' || key === 'present_upazila' || key === 'permanent_district' || key === 'permanent_upazila') {
+      if (
+        key === 'present_district' ||
+        key === 'present_upazila' ||
+        key === 'permanent_district' ||
+        key === 'permanent_upazila' ||
+        key === 'job_experiences'
+      ) {
         continue;
       }
       const el = document.getElementById(key);
@@ -327,6 +582,8 @@
       }
     }
 
+    renderJobExperiences(data.job_experiences);
+
     lastAutoMobile = data.mobile || '';
     if (els.same_as_present.checked) {
       syncPresentToPermanent();
@@ -340,6 +597,7 @@
   function collectFormData() {
     const raw = {};
     for (const key of Object.keys(Storage.DEFAULT_PROFILE_DATA)) {
+      if (key === 'job_experiences') continue;
       const el = document.getElementById(key);
       if (!el) continue;
       if (el.type === 'checkbox') {
@@ -352,6 +610,8 @@
         raw[key] = val;
       }
     }
+
+    raw.job_experiences = collectJobExperiences();
 
     if (raw.same_as_present) {
       raw.permanent_careof = raw.present_careof;
@@ -643,6 +903,18 @@
 
     els.gra_applicable.addEventListener('change', refreshConditionalVisibility);
     els.mas_applicable.addEventListener('change', refreshConditionalVisibility);
+    if (els.exp_applicable) {
+      els.exp_applicable.addEventListener('change', refreshConditionalVisibility);
+    }
+    if (els.btnAddJobExp) {
+      els.btnAddJobExp.addEventListener('click', () => {
+        const jobs = collectJobExperiences();
+        jobs.push({ ...Storage.DEFAULT_JOB_EXPERIENCE_ITEM });
+        renderJobExperiences(jobs);
+        refreshConditionalVisibility();
+        setDirty(true);
+      });
+    }
 
     for (const rule of CONDITIONAL_SELECTS) {
       const sel = document.getElementById(rule.selectId);

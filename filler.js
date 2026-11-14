@@ -121,7 +121,16 @@
     ['rajshahi university of engineering & technology', 'ruet'],
     ['shahjalal university of science & technology', 'sust'],
     ['the university of asia pacific', 'university of asia pacific', 'uap'],
-    ['southern university bangladesh', 'southern university of bangladesh, chittagong']
+    ['southern university bangladesh', 'southern university of bangladesh, chittagong'],
+
+    // Employment Types (Job Experiences)
+    ['regular basis under revenue budget', 'regular basis', 'revenue budget'],
+    ['ad-hoc basis under revenue budget', 'adhoc basis under revenue budget', 'ad-hoc basis', 'adhoc'],
+    ['temporary basis under revenue budget', 'temporary basis'],
+    ['work charged basis under revenue budget', 'work charged'],
+    ['autonomous/semi autonomous organization', 'autonomous / semi autonomous organization', 'autonomous organization', 'semi autonomous organization', 'autonomous'],
+    ['private organization', 'private service', 'private company', 'private'],
+    ['business/self employed', 'business / self employed', 'self employed', 'self-employed', 'business']
   ];
 
   const ALIAS_LOOKUP = (() => {
@@ -213,7 +222,9 @@
       ssc: ['#sscSection', '#ssc_section', '#ssc_fieldset'],
       hsc: ['#hscSection', '#hsc_section', '#hsc_fieldset'],
       graduation: ['#graSection', '#gra_section', '#graduationSection', '#grad_section'],
-      masters: ['#masSection', '#mas_section', '#mastersSection']
+      masters: ['#masSection', '#mas_section', '#mastersSection'],
+      job_experience: ['#expSection', '#jobExpSection', '#experienceSection', '#exp_section'],
+      other_experience: ['#otherExpSection', '#other_exp_section', '#otherQualificationSection']
     };
 
     if (sectionIdHints[sectionKey]) {
@@ -229,7 +240,9 @@
       ssc: /s\.?s\.?c\s*\/\s*equivalent|s\.?s\.?c\.?\s*level|secondary\s*school|মাধ্যমিক/i,
       hsc: /h\.?s\.?c\s*\/\s*equivalent|h\.?s\.?c\.?\s*level|higher\s*secondary|উচ্চ\s*মাধ্যমিক/i,
       graduation: /graduation|bachelor|honours|honors|স্নাতক/i,
-      masters: /masters|master's|post\s*grad|স্নাতকোত্তর/i
+      masters: /masters|master's|post\s*grad|স্নাতকোত্তর/i,
+      job_experience: /job\s*experiences?|professional\s*experiences?|employment\s*history|চাকরির\s*অভিজ্ঞতা/i,
+      other_experience: /other\s*qualifications?\s*(?:\/|\s*or\s*|\s*and\s*)?\s*experiences?|other\s*experiences?|অন্যান্য\s*যোগ্যতা/i
     };
 
     const rx = headingRegexes[sectionKey];
@@ -1543,6 +1556,232 @@
     }
   }
 
+  function hasFilledJobItem(job) {
+    if (!job || typeof job !== 'object') return false;
+    if (job.currently_working === true) return true;
+    const keys = [
+      'employment_type',
+      'designation',
+      'organization',
+      'office_address',
+      'job_start_date',
+      'job_end_date',
+      'last_salary',
+      'job_description'
+    ];
+    return keys.some((k) => String(job[k] || '').trim() !== '');
+  }
+
+  function fillDateControl(el, isoDate, stats) {
+    if (!el || !isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return false;
+    if ((el.disabled || el.readOnly) && String(el.value || '').trim() !== '') {
+      markFilled(el);
+      stats.filledCount++;
+      return true;
+    }
+    if (!isElementInteractive(el)) return false;
+
+    const valToSet = el.type === 'date' ? isoDate : formatDobForTextInput(isoDate, el);
+    setNativeValue(el, valToSet);
+    dispatchFieldEvents(el, true);
+    markFilled(el);
+    stats.filledCount++;
+    return true;
+  }
+
+  function queryFirstInScope(scope, selectors) {
+    for (const sel of selectors) {
+      const found = scope.querySelector(sel);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  async function fillSingleJobBlock(job, getControl, stats) {
+    const todayIso = new Date().toISOString().slice(0, 10);
+
+    if (job.employment_type) {
+      selectOptionSmart(getControl('employment_type', '.employment_type'), job.employment_type, stats);
+    }
+    fillTextField(getControl('designation', '.designation'), job.designation, stats);
+    fillTextField(getControl('organization', '.organization'), job.organization, stats);
+    fillTextField(getControl('office_address', '.office_address'), job.office_address, stats);
+    fillDateControl(getControl('job_start_date', '.job_start_date'), job.job_start_date, stats);
+
+    const currCb = getControl('currently_working', '.currently_working');
+    const endEl = getControl('job_end_date', '.job_end_date');
+    if (job.currently_working) {
+      if (currCb && !currCb.disabled) {
+        toggleCheckbox(currCb, true);
+        markFilled(currCb);
+        stats.filledCount++;
+        await delay(100);
+      }
+      if (endEl && isElementInteractive(endEl) && !String(endEl.value || '').trim()) {
+        fillDateControl(endEl, job.job_end_date || endEl.getAttribute('max') || todayIso, stats);
+      }
+    } else {
+      if (currCb && currCb.checked && !currCb.disabled) {
+        toggleCheckbox(currCb, false);
+        await delay(80);
+      }
+      if (job.job_end_date) {
+        fillDateControl(endEl, job.job_end_date, stats);
+      }
+    }
+
+    if (job.last_salary) {
+      fillTextField(getControl('last_salary', '.last_salary'), job.last_salary, stats);
+    }
+    if (job.job_description) {
+      fillTextField(getControl('job_description', '.job_description'), job.job_description, stats);
+    }
+  }
+
+  async function fillJobExperiences(data, stats) {
+    const expContainer = findSectionContainer('job_experience');
+    const scope = expContainer && expContainer !== document ? expContainer : document;
+
+    const expCheckbox =
+      queryFirstInScope(scope, ['#if_applicable_exp', '[name="if_applicable_exp"]', '.if_applicable_exp']) ||
+      queryFirstInScope(document, ['#if_applicable_exp', '[name="if_applicable_exp"]', '.if_applicable_exp']);
+
+    const jobs = (Array.isArray(data.job_experiences) ? data.job_experiences : []).filter(hasFilledJobItem);
+    if (!data.exp_applicable || jobs.length === 0) {
+      if (expCheckbox && expCheckbox.checked) {
+        toggleCheckbox(expCheckbox, false);
+      }
+      return;
+    }
+
+    const hasJobSection = Boolean(
+      expCheckbox ||
+      (expContainer && expContainer !== document) ||
+      scope.querySelector('.jobExpTemplate') ||
+      scope.querySelector('[name="job[0][employment_type]"]') ||
+      document.getElementById('employment_type') ||
+      scope.querySelector('[name="employment_type"]')
+    );
+    if (!hasJobSection) return;
+
+    if (expCheckbox) {
+      toggleCheckbox(expCheckbox, true);
+      markFilled(expCheckbox);
+      stats.filledCount++;
+      await waitForVisibleAndEnabled(
+        () =>
+          scope.querySelector('.employment_type') ||
+          scope.querySelector('[name="job[0][employment_type]"]') ||
+          document.getElementById('employment_type'),
+        1500
+      );
+    }
+
+    const getBlocks = () => Array.from(scope.querySelectorAll('.jobExpTemplate'));
+
+    if (getBlocks().length > 0) {
+      while (getBlocks().length < jobs.length) {
+        const addBtn =
+          document.getElementById('addNewJob') ||
+          scope.querySelector('#addNewJob') ||
+          Array.from(scope.querySelectorAll('button, a')).find((b) => {
+            const txt = b.textContent || '';
+            const onClick = b.getAttribute('onclick') || '';
+            return /add\s*more|add\s*new/i.test(txt) || /addNewExp/i.test(onClick);
+          });
+        if (!addBtn || addBtn.disabled) break;
+
+        const prevCount = getBlocks().length;
+        addBtn.click();
+        await waitForVisibleAndEnabled(() => {
+          const b = getBlocks()[prevCount];
+          if (!b) return null;
+          return b.querySelector('.employment_type') || b.querySelector('select') || b.querySelector('input');
+        }, 1200);
+
+        if (getBlocks().length <= prevCount) break;
+      }
+
+      const blocks = getBlocks();
+      const count = Math.min(jobs.length, blocks.length);
+      for (let i = 0; i < count; i++) {
+        const block = blocks[i];
+        await fillSingleJobBlock(
+          jobs[i],
+          (prop, cls) => block.querySelector(`[name="job[${i}][${prop}]"]`) || block.querySelector(cls),
+          stats
+        );
+      }
+      return;
+    }
+
+    // Legacy single-block fallback when .jobExpTemplate wrapper is absent
+    await fillSingleJobBlock(
+      jobs[0],
+      (prop, cls) => queryFirstInScope(scope, [`#${prop}`, `[name="${prop}"]`, cls]),
+      stats
+    );
+  }
+
+  function findRowQuestionText(row, selectEl) {
+    const insideLabel = row ? row.querySelector('label') : null;
+    if (insideLabel && insideLabel.textContent) {
+      return insideLabel.textContent;
+    }
+    if (selectEl && selectEl.id) {
+      const forLabel = Array.from(document.querySelectorAll('label')).find((l) => l.htmlFor === selectEl.id);
+      if (forLabel && forLabel.textContent) {
+        return forLabel.textContent;
+      }
+    }
+    return (row && row.textContent) || '';
+  }
+
+  async function fillOtherExperiences(data, stats) {
+    const otherContainer = findSectionContainer('other_experience');
+    const searchRoot = otherContainer && otherContainer !== document ? otherContainer : document;
+
+    let rows = Array.from(searchRoot.querySelectorAll('.other_exp'));
+    if (rows.length === 0 && otherContainer && otherContainer !== document) {
+      rows = Array.from(otherContainer.querySelectorAll('.form-group, tr')).filter((r) => Boolean(r.querySelector('select')));
+    }
+    if (rows.length === 0) {
+      const directSel = document.querySelector('[name="other_exp[0][value]"]');
+      if (directSel) {
+        const parentRow = directSel.closest('.form-group, tr, div') || directSel.parentElement;
+        if (parentRow) rows = [parentRow];
+      }
+    }
+
+    for (const row of rows) {
+      const selectEl = row.querySelector('.exp_value') || row.querySelector('select');
+      if (!selectEl) continue;
+
+      const qText = findRowQuestionText(row, selectEl);
+      let target = '';
+      if (/\bcomputer\b|proficiency\s+in\s+operating|relevant\s+field|কম্পিউটার/i.test(qText)) {
+        target = data.other_computer_proficiency || '';
+      } else if (/\btyping\b|\bshorthand\b|\bstenograph|\bspeed\b|\bwpm\b|টাইপ|মুদ্রাক্ষর|সাঁটলিপি/i.test(qText)) {
+        target = data.other_typing_speed || '';
+      } else {
+        target = data.other_default_response || '';
+      }
+
+      if (!target) continue;
+
+      const ok = selectOptionSmart(selectEl, target, stats);
+      if (ok && normalizeText(target) === 'yes' && data.other_exp_details) {
+        const detailEl = await waitForVisibleAndEnabled(
+          () => Array.from(row.querySelectorAll('input, textarea')).find((el) => matchesKind(el, 'text') && isElementInteractive(el)),
+          600
+        );
+        if (detailEl && isElementInteractive(detailEl) && !String(detailEl.value || '').trim()) {
+          fillTextField(detailEl, data.other_exp_details, stats);
+        }
+      }
+    }
+  }
+
   function highlightMissingRequiredFields(stats) {
     const requiredControls = Array.from(document.querySelectorAll('input[required], select[required], textarea[required]'));
     for (const el of requiredControls) {
@@ -1571,7 +1810,7 @@
     const label = profileName ? ` (${profileName})` : '';
 
     // Step 1: Basic Information
-    showToast(`⏳ Step 1/3: Filling Basic Information${label}...`, 'Matching names, DOB, IDs, mobile & quota');
+    showToast(`⏳ Step 1/4: Filling Basic Information${label}...`, 'Matching names, DOB, IDs, mobile & quota');
 
     fillTextField(findFieldElement(FIELD_MAP.name), data.name, stats);
     fillTextField(findFieldElement(FIELD_MAP.name_bn), data.name_bn, stats);
@@ -1617,7 +1856,7 @@
     }
 
     // Step 2: Address Information
-    showToast(`⏳ Step 2/3: Filling Addresses & waiting for Upazilas${label}...`, 'Handling District -> Upazila/P.S. dropdowns');
+    showToast(`⏳ Step 2/4: Filling Addresses & waiting for Upazilas${label}...`, 'Handling District -> Upazila/P.S. dropdowns');
 
     fillTextField(findFieldElement(FIELD_MAP.present_careof), data.present_careof, stats);
     fillTextField(findFieldElement(FIELD_MAP.present_village), data.present_village, stats);
@@ -1699,12 +1938,18 @@
     }
 
     // Step 3: Educational Qualifications
-    showToast(`⏳ Step 3/3: Filling Educational Qualifications${label}...`, 'Processing SSC, HSC, Graduation & Masters');
+    showToast(`⏳ Step 3/4: Filling Educational Qualifications${label}...`, 'Processing SSC, HSC, Graduation & Masters');
 
     await fillEduBlock('ssc', data, stats);
     await fillEduBlock('hsc', data, stats);
     await fillHigherEduBlock('gra', Boolean(data.gra_applicable), data, stats);
     await fillHigherEduBlock('mas', Boolean(data.mas_applicable), data, stats);
+
+    // Step 4: Job Experiences & Other Qualifications / Experiences
+    showToast(`⏳ Step 4/4: Filling Job & Other Experiences${label}...`, 'Processing work history & post-specific qualifications');
+
+    await fillJobExperiences(data, stats);
+    await fillOtherExperiences(data, stats);
 
     // Highlight any empty required inputs (such as Captcha or missing profile fields)
     highlightMissingRequiredFields(stats);

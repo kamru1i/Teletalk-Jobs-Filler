@@ -5,6 +5,41 @@
   const BACKUP_APP_ID = 'Teletalk Jobs Filler';
   const BACKUP_VERSION = 1;
 
+  const DEFAULT_JOB_EXPERIENCE_ITEM = {
+    employment_type: '',
+    designation: '',
+    organization: '',
+    office_address: '',
+    job_start_date: '',
+    job_end_date: '',
+    currently_working: false,
+    last_salary: '',
+    job_description: ''
+  };
+
+  const JOB_EXPERIENCE_STRING_KEYS = [
+    'employment_type',
+    'designation',
+    'organization',
+    'office_address',
+    'job_start_date',
+    'job_end_date',
+    'last_salary',
+    'job_description'
+  ];
+
+  function normalizeJobExperienceItem(rawItem) {
+    const src = rawItem && typeof rawItem === 'object' ? rawItem : {};
+    const out = {};
+    for (const field of JOB_EXPERIENCE_STRING_KEYS) {
+      const val = src[field];
+      out[field] = val === undefined || val === null ? '' : String(val);
+    }
+    const cw = src.currently_working;
+    out.currently_working = cw === true || cw === 'true' || cw === 1 || cw === '1';
+    return out;
+  }
+
   /**
    * Canonical profile schema. ZERO hardcoded personal details.
    * Stores human-readable labels so autofill works across both old PHP and modern Alljobs portals.
@@ -97,13 +132,22 @@
     mas_result_type: '',
     mas_result: '',
     mas_year: '',
-    mas_duration: ''
+    mas_duration: '',
+
+    // 4. Job Experiences & Other Qualifications / Experiences
+    exp_applicable: false,
+    job_experiences: [{ ...DEFAULT_JOB_EXPERIENCE_ITEM }],
+    other_computer_proficiency: '',
+    other_typing_speed: '',
+    other_default_response: '',
+    other_exp_details: ''
   };
 
   const BOOLEAN_KEYS = new Set([
     'same_as_present',
     'gra_applicable',
-    'mas_applicable'
+    'mas_applicable',
+    'exp_applicable'
   ]);
 
   const DEFAULT_BASELINE_VALUES = {
@@ -128,7 +172,13 @@
     for (const key of Object.keys(DEFAULT_PROFILE_DATA)) {
       const defVal = DEFAULT_PROFILE_DATA[key];
       const rawVal = source[key];
-      if (BOOLEAN_KEYS.has(key)) {
+      if (key === 'job_experiences') {
+        if (Array.isArray(rawVal) && rawVal.length > 0) {
+          normalized.job_experiences = rawVal.map(normalizeJobExperienceItem);
+        } else {
+          normalized.job_experiences = [{ ...DEFAULT_JOB_EXPERIENCE_ITEM }];
+        }
+      } else if (BOOLEAN_KEYS.has(key)) {
         normalized[key] = rawVal === true || rawVal === 'true' || rawVal === 1 || rawVal === '1';
       } else if (rawVal === undefined || rawVal === null) {
         normalized[key] = defVal;
@@ -352,6 +402,16 @@
     let count = 0;
     for (const key of Object.keys(DEFAULT_PROFILE_DATA)) {
       if (BOOLEAN_KEYS.has(key)) continue;
+      if (key === 'job_experiences') {
+        if (Array.isArray(norm.job_experiences)) {
+          for (const job of norm.job_experiences) {
+            for (const f of JOB_EXPERIENCE_STRING_KEYS) {
+              if (String(job[f] || '').trim() !== '') count += 1;
+            }
+          }
+        }
+        continue;
+      }
       if (key === 'spouse_name' && norm.marital_status !== 'Married') continue;
       if (key === 'nid_no' && norm.nid_has !== 'Yes') continue;
       if (key === 'breg_no' && norm.breg_has !== 'Yes') continue;
@@ -374,6 +434,17 @@
     for (const key of Object.keys(DEFAULT_PROFILE_DATA)) {
       if (BOOLEAN_KEYS.has(key)) {
         if (norm[key] === true) return true;
+        continue;
+      }
+      if (key === 'job_experiences') {
+        if (Array.isArray(norm.job_experiences)) {
+          for (const job of norm.job_experiences) {
+            if (job.currently_working === true) return true;
+            for (const f of JOB_EXPERIENCE_STRING_KEYS) {
+              if (String(job[f] || '').trim() !== '') return true;
+            }
+          }
+        }
         continue;
       }
       const val = String(norm[key] || '').trim();
@@ -481,6 +552,8 @@
   const TJFStorage = {
     STORAGE_KEY,
     DEFAULT_PROFILE_DATA,
+    DEFAULT_JOB_EXPERIENCE_ITEM,
+    normalizeJobExperienceItem,
     normalizeProfileData,
     createEmptyProfile,
     getState,

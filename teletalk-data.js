@@ -559,6 +559,18 @@
     '3+ Years'
   ];
 
+  const EMPLOYMENT_TYPES = [
+    'Regular Basis Under Revenue Budget',
+    'Ad-hoc Basis Under Revenue Budget',
+    'Temporary Basis Under Revenue Budget',
+    'Work Charged Basis Under Revenue Budget',
+    'Temporary Basis Under Development Project',
+    'Work Charged Basis Under Development Project',
+    'Autonomous/Semi Autonomous Organization',
+    'Private Organization',
+    'Business/Self Employed'
+  ];
+
   const PASSING_YEARS = [];
   for (let y = 2030; y >= 1980; y--) {
     PASSING_YEARS.push(String(y));
@@ -1044,6 +1056,7 @@
     MAS_RESULT_TYPES,
     GRA_DURATIONS,
     MAS_DURATIONS,
+    EMPLOYMENT_TYPES,
     PASSING_YEARS,
     UNIVERSITIES,
     GRA_SUBJECTS,
