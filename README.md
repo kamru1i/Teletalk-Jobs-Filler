@@ -11,7 +11,8 @@
 - **Multi-Profile Support:** একই কম্পিউটার থেকে নিজের, ভাই-বোন বা বন্ধুদের জন্য আলাদা আলাদা প্রোফাইল (`My Profile`, `Friend 1` ইত্যাদি) সেভ এবং সুইচ করার সুবিধা।
 - **Smart Cascading Dropdown Handler:** District সিলেক্ট করার পর `Upazila/P.S.`, Examination সিলেক্ট করার পর `Group/Subject`, অথবা `National ID -> Yes` ও `Result -> GPA` দেওয়ার পর ডায়নামিকভাবে আসা ইনপুট বক্সগুলোর জন্য স্বয়ংক্রিয়ভাবে অপেক্ষা করে সব ডাটা পূরণ করে।
 - **Old & New Teletalk Portal Compatible:** পুরাতন PHP টেমপ্লেট ও নতুন Alljobs/DGBPO টেমপ্লেট — উভয়ের ফিল্ড ID/Name এবং বাংলা/ইংরেজি লেবেল দেখে স্বয়ংক্রিয়ভাবে ম্যাচ করে (যেমন `Chattogram` / `Chittagong`, `Cumilla` / `Comilla`, `GPA(out of 5)` ইত্যাদি)।
-- **Job Experiences & Other Qualifications Support:** প্রয়োজনে একাধিক **Job Experiences** (`+ Add Another Job Experience` সহ, অটোমেটিক `+ ADD MORE` ক্লিক, `Currently Working`, ও ৩০০ অক্ষরের `Job Description`) এবং **Other Qualifications / Experiences** (*Do you have Proficiency in Operating a Computer, along with working in a Relevant field?*, টাইপিং স্পিড ও ফলো-আপ ডিটেইলস) একসাথে সেভ ও অটো-ফিল করে।
+- **Teletalk-Style Application Form UI:** ড্যাশবোর্ডটি আসল Teletalk সরকারি চাকরির আবেদন ফরমের ডিজাইন অনুযায়ী সাজানো (সবুজ ব্যানার, `Same as Present Address` / `If Applicable` টগল ও পূরণকৃত ঘরে সবুজ বর্ডার), যাতে ব্যবহারকারীরা কোনো জটিলতা ছাড়াই পরিচিত লেআউটে তথ্য সেভ করতে পারেন।
+- **Job Experiences & Computer Proficiency:** প্রয়োজনে একাধিক **Job Experiences** (`⊕ ADD MORE` সহ, অটোমেটিক `+ ADD MORE` ক্লিক, `Currently Working`, ও ৩০০ অক্ষরের `Job Description`) এবং **Other Qualifications / Experiences** (*1) Do you have Proficiency in Operating a Computer, along with working in a Relevant field? — Yes*) একসাথে সেভ ও অটো-ফিল করে।
 - **Visual Review Highlights:** সঠিকভাবে পূরণ হওয়া ঘরগুলো **সবুজ (Green)** রঙে এবং ক্যাপচা বা কোনো ঘর বাদ পড়লে তা **হলুদ (Yellow)** রঙে হাইলাইট হয় যেন সাবমিটের আগে সহজেই চোখে পড়ে।
 - **100% Private + JSON Backup:** সমস্ত ডাটা আপনার ব্রাউজারের `chrome.storage.local`-এ থাকে। যেকোনো সময় **Export Backup (JSON)** করে পেনড্রাইভ/ইমেইলে রাখতে এবং অন্য কম্পিউটারে **Import Backup** করতে পারবেন।
 
@@ -39,9 +40,9 @@
    - **Basic Information:** নিজের নাম, পিতার ও মাতার নাম (ইংরেজি ও বাংলা ইউনিকোড), জন্ম তারিখ, ধর্ম, লিঙ্গ, NID/জন্ম নিবন্ধন, মোবাইল নম্বর, ইমেইল, কোটা ইত্যাদি।
    - **Address Information:** বর্তমান ও স্থায়ী ঠিকানা (একই হলে **Same as Present Address** টিক দিন)।
    - **Educational Qualifications:** SSC, HSC এবং প্রয়োজনে Graduation ও Masters-এর **If Applicable** টিক দিয়ে সব তথ্য দিন।
-   - **Job & Other Experiences:** প্রয়োজনে **If Applicable** টিক দিয়ে এক বা একাধিক **Job Experiences** (`Currently Working` ও ৩০০ অক্ষরের `Job Description` সহ) এবং **Other Qualifications / Experiences** (*Do you have Proficiency in Operating a Computer, along with working in a Relevant field?*, টাইপিং/সাঁটলিপি স্পিড ও ফলো-আপ ডিটেইলস) সেভ করুন।
+   - **Job & Other Experiences:** প্রয়োজনে **If Applicable** টিক দিয়ে এক বা একাধিক **Job Experiences** (`Currently Working` ও ৩০০ অক্ষরের `Job Description` সহ) এবং **Other Qualifications / Experiences** (*1) Do you have Proficiency in Operating a Computer, along with working in a Relevant field?* — `Select` / `Yes`) সেভ করুন।
 4. উপরে বা নিচে থাকা **💾 Save Profile** বাটনে ক্লিক করুন (অথবা `Ctrl + S` চাপুন)।
-5. বন্ধু বা পরিবারের অন্য কারো প্রোফাইল যোগ করতে চাইলে উপরে থাকা **+ New Profile** বাটনে ক্লিক করুন।
+5. বন্ধু বা পরিবারের অন্য কারো প্রোফাইল যোগ করতে চাইলে উপরে থাকা **+ New** বাটনে ক্লিক করুন।
 
 ### ধাপ ৩: সরকারি চাকরির ফরম অটো-ফিল করা
 1. যেকোনো Teletalk সরকারি চাকরির আবেদন পেজ (`*.teletalk.com.bd`) ওপেন করুন।
@@ -68,12 +69,12 @@
 6. *(After an extension update)* Open `chrome://extensions/` and click the **Reload (🔄)** icon on the **Teletalk Jobs Filler** card to activate new fields while preserving all existing saved profiles.
 
 ### Step 2: Save Applicant Profiles
-1. Click the **Teletalk Jobs Filler** extension icon and choose **⚙️ Edit / Manage Saved Data**.
+1. Click the **Teletalk Jobs Filler** extension icon and choose **⚙️ Edit / Manage Saved Data** to open the Teletalk-styled Application Form dashboard.
 2. Fill in **Basic Information**, **Address Information**, **Educational Qualifications** (toggle **If Applicable** for Graduation / Masters if needed), and **Job & Other Experiences**:
-   - **Job Experiences:** Toggle **If Applicable** and save one or more jobs (`+ Add Another Job Experience`), including `Currently Working` and your 300-character `Job Description`.
-   - **Other Qualifications / Experiences:** Answer circular-specific questions such as *1) Do you have Proficiency in Operating a Computer, along with working in a Relevant field?*, typing/shorthand speed, and optional follow-up details.
+   - **Job Experiences:** Toggle **If Applicable** and save one or more jobs (`⊕ ADD MORE`), including `CurrentlyWorking` and your 300-character `Job Description`.
+   - **Other Qualifications / Experiences:** Select **Yes** for *1) Do you have Proficiency in Operating a Computer, along with working in a Relevant field?* when required.
 3. Click **💾 Save Profile** (or press `Ctrl + S`).
-4. Use **+ New Profile**, **✏️ Rename**, **📋 Duplicate**, and **🗑️ Delete** in the top bar to manage profiles for multiple applicants on the same PC.
+4. Use **+ New**, **✏️ Rename**, **📋 Copy**, and **🗑️ Delete** in the green navigation bar to manage profiles for multiple applicants on the same PC.
 
 ### Step 3: Autofill Any Teletalk Application Form
 1. Open the application form page on any `*.teletalk.com.bd` portal.

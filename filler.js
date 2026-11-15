@@ -1,9 +1,6 @@
 (function () {
   'use strict';
 
-  if (typeof window !== 'undefined' && window.__TELETALK_JOBS_FILLER_ACTIVE__) {
-    return;
-  }
   if (typeof window !== 'undefined') {
     window.__TELETALK_JOBS_FILLER_ACTIVE__ = true;
   }
@@ -372,11 +369,20 @@
     }
   }
 
+  function shouldSkipFocusDispatch(el) {
+    if (!el) return true;
+    const typeAttr = String(el.getAttribute ? el.getAttribute('type') || '' : el.type || '').toLowerCase();
+    const onFocusAttr = String(el.getAttribute ? el.getAttribute('onfocus') || '' : '');
+    return el.type === 'date' || typeAttr === 'date' || /showPicker/i.test(onFocusAttr);
+  }
+
   function dispatchFieldEvents(el, includeKeyup = true) {
-    try {
-      el.dispatchEvent(new FocusEvent('focus', { bubbles: false }));
-    } catch (_e) {
-      el.dispatchEvent(new Event('focus', { bubbles: false }));
+    if (!shouldSkipFocusDispatch(el)) {
+      try {
+        el.dispatchEvent(new FocusEvent('focus', { bubbles: false }));
+      } catch (_e) {
+        el.dispatchEvent(new Event('focus', { bubbles: false }));
+      }
     }
 
     try {
@@ -596,9 +602,12 @@
   }
 
   function injectStyles() {
-    if (document.getElementById(STYLE_ID)) return;
-    const style = document.createElement('style');
-    style.id = STYLE_ID;
+    let style = document.getElementById(STYLE_ID);
+    if (!style) {
+      style = document.createElement('style');
+      style.id = STYLE_ID;
+      (document.head || document.documentElement).appendChild(style);
+    }
     style.textContent = `
       .tjf-field-filled {
         border: 2px solid #22c55e !important;
@@ -665,7 +674,6 @@
         opacity: 1;
       }
     `;
-    (document.head || document.documentElement).appendChild(style);
   }
 
   let toastAutoHideTimer = null;
@@ -1500,9 +1508,6 @@
 
     const checkbox = findFieldElement(checkDesc);
     if (!applicableFlag) {
-      if (checkbox && checkbox.checked) {
-        toggleCheckbox(checkbox, false);
-      }
       return;
     }
 
@@ -1638,18 +1643,50 @@
     }
   }
 
+  function findJobExpCheckbox(scope) {
+    const expSection = document.getElementById('expSection');
+    const directSelectors = ['#if_applicable_exp', '[name="if_applicable_exp"]', '.if_applicable_exp'];
+
+    const direct =
+      queryFirstInScope(scope, directSelectors) ||
+      (expSection ? queryFirstInScope(expSection, directSelectors) : null) ||
+      queryFirstInScope(document, directSelectors);
+    if (direct) return direct;
+
+    const scopedRoot = expSection || (scope && scope !== document ? scope : null);
+    if (scopedRoot) {
+      const candidate = Array.from(scopedRoot.querySelectorAll('input[type="checkbox"]')).find((cb) => {
+        const meta = `${cb.id || ''} ${cb.name || ''} ${cb.getAttribute('onclick') || ''}`.toLowerCase();
+        if (meta.includes('currently_working') || meta.includes('curr_work')) return false;
+        return meta.includes('applicable') || /if\s*applicable/i.test((cb.parentElement && cb.parentElement.textContent) || '');
+      });
+      if (candidate) return candidate;
+
+      for (const lbl of Array.from(scopedRoot.querySelectorAll('label'))) {
+        if (!/if\s*applicable/i.test(lbl.textContent || '')) continue;
+        if (lbl.htmlFor) {
+          const target = document.getElementById(lbl.htmlFor);
+          if (target && target.type === 'checkbox') return target;
+        }
+        const nested = lbl.querySelector('input[type="checkbox"]');
+        if (nested) return nested;
+      }
+    }
+
+    return null;
+  }
+
   async function fillJobExperiences(data, stats) {
     const expContainer = findSectionContainer('job_experience');
-    const scope = expContainer && expContainer !== document ? expContainer : document;
+    const expSectionById = document.getElementById('expSection');
+    const scope = expContainer && expContainer !== document ? expContainer : expSectionById || document;
 
-    const expCheckbox =
-      queryFirstInScope(scope, ['#if_applicable_exp', '[name="if_applicable_exp"]', '.if_applicable_exp']) ||
-      queryFirstInScope(document, ['#if_applicable_exp', '[name="if_applicable_exp"]', '.if_applicable_exp']);
-
+    const expCheckbox = findJobExpCheckbox(scope);
     const jobs = (Array.isArray(data.job_experiences) ? data.job_experiences : []).filter(hasFilledJobItem);
+
     if (!data.exp_applicable || jobs.length === 0) {
       if (expCheckbox && expCheckbox.checked) {
-        toggleCheckbox(expCheckbox, false);
+        stats.missingJobProfileData = true;
       }
       return;
     }
@@ -1657,6 +1694,7 @@
     const hasJobSection = Boolean(
       expCheckbox ||
       (expContainer && expContainer !== document) ||
+      expSectionById ||
       scope.querySelector('.jobExpTemplate') ||
       scope.querySelector('[name="job[0][employment_type]"]') ||
       document.getElementById('employment_type') ||
@@ -1665,16 +1703,48 @@
     if (!hasJobSection) return;
 
     if (expCheckbox) {
-      toggleCheckbox(expCheckbox, true);
-      markFilled(expCheckbox);
-      stats.filledCount++;
-      await waitForVisibleAndEnabled(
+      if (!expCheckbox.checked) {
+        toggleCheckbox(expCheckbox, true);
+        if (!expCheckbox.checked && expCheckbox.id) {
+          const lbl = Array.from(document.querySelectorAll('label')).find((l) => l.htmlFor === expCheckbox.id);
+          if (lbl) lbl.click();
+        }
+        if (!expCheckbox.checked && !expCheckbox.disabled) {
+          expCheckbox.checked = true;
+          dispatchFieldEvents(expCheckbox, false);
+        }
+      }
+
+      if (expCheckbox.checked) {
+        markFilled(expCheckbox);
+        stats.filledCount++;
+      }
+
+      const enabledTarget = await waitForVisibleAndEnabled(
         () =>
           scope.querySelector('.employment_type') ||
           scope.querySelector('[name="job[0][employment_type]"]') ||
           document.getElementById('employment_type'),
         1500
       );
+
+      // Fallback unlock if Teletalk's handler left job fields disabled despite If Applicable being checked
+      if (expCheckbox.checked && (!enabledTarget || enabledTarget.disabled)) {
+        const unlockSelector =
+          scope !== document
+            ? 'input, select, textarea, button'
+            : '.jobExpTemplate input, .jobExpTemplate select, .jobExpTemplate textarea, .jobExpTemplate button, #addNewJob';
+        for (const ctrl of scope.querySelectorAll(unlockSelector)) {
+          if (ctrl === expCheckbox) continue;
+          if (ctrl.classList && ctrl.classList.contains('job_end_date')) {
+            const block = ctrl.closest('.jobExpTemplate');
+            const cw = block && block.querySelector('.currently_working');
+            if (cw && cw.checked) continue;
+          }
+          ctrl.disabled = false;
+          ctrl.removeAttribute('disabled');
+        }
+      }
     }
 
     const getBlocks = () => Array.from(scope.querySelectorAll('.jobExpTemplate'));
@@ -1706,9 +1776,14 @@
       const count = Math.min(jobs.length, blocks.length);
       for (let i = 0; i < count; i++) {
         const block = blocks[i];
+        const rawDataIdx = block.getAttribute ? block.getAttribute('data-index') : null;
+        const dataIdx = rawDataIdx !== null && String(rawDataIdx).trim() !== '' ? String(rawDataIdx).trim() : String(i);
         await fillSingleJobBlock(
           jobs[i],
-          (prop, cls) => block.querySelector(`[name="job[${i}][${prop}]"]`) || block.querySelector(cls),
+          (prop, cls) =>
+            block.querySelector(`[name="job[${dataIdx}][${prop}]"]`) ||
+            block.querySelector(`[name="job[${i}][${prop}]"]`) ||
+            block.querySelector(cls),
           stats
         );
       }
@@ -1738,45 +1813,92 @@
   }
 
   async function fillOtherExperiences(data, stats) {
+    if (normalizeText(data.other_computer_proficiency) !== 'yes') {
+      return;
+    }
+
+    const COMPUTER_Q_REGEX = /\bcomputer\b|proficiency\s+in\s+operating|relevant\s+field|কম্পিউটার/i;
     const otherContainer = findSectionContainer('other_experience');
-    const searchRoot = otherContainer && otherContainer !== document ? otherContainer : document;
+    const otherSectionById = document.getElementById('otherExpSection');
+    const searchRoot =
+      otherContainer && otherContainer !== document ? otherContainer : otherSectionById || document;
 
-    let rows = Array.from(searchRoot.querySelectorAll('.other_exp'));
-    if (rows.length === 0 && otherContainer && otherContainer !== document) {
-      rows = Array.from(otherContainer.querySelectorAll('.form-group, tr')).filter((r) => Boolean(r.querySelector('select')));
+    const candidateEntries = [];
+    const seenSelects = new Set();
+
+    const addCandidate = (selectEl, row) => {
+      if (!selectEl || seenSelects.has(selectEl)) return;
+      seenSelects.add(selectEl);
+      candidateEntries.push({ selectEl, row: row || selectEl.closest('.other_exp, .form-group, .row, tr') || selectEl.parentElement });
+    };
+
+    for (const row of Array.from(searchRoot.querySelectorAll('.other_exp'))) {
+      addCandidate(row.querySelector('.exp_value') || row.querySelector('select'), row);
     }
-    if (rows.length === 0) {
-      const directSel = document.querySelector('[name="other_exp[0][value]"]');
-      if (directSel) {
-        const parentRow = directSel.closest('.form-group, tr, div') || directSel.parentElement;
-        if (parentRow) rows = [parentRow];
+
+    if (candidateEntries.length === 0 && searchRoot !== document) {
+      for (const row of Array.from(searchRoot.querySelectorAll('.form-group, .row, tr'))) {
+        addCandidate(row.querySelector('select'), row);
+      }
+      for (const sel of Array.from(searchRoot.querySelectorAll('select'))) {
+        addCandidate(sel, null);
       }
     }
 
-    for (const row of rows) {
-      const selectEl = row.querySelector('.exp_value') || row.querySelector('select');
-      if (!selectEl) continue;
+    const directSel =
+      document.querySelector('[id="other_exp[0][value]"]') ||
+      document.querySelector('[name="other_exp[0][value]"]') ||
+      document.querySelector('.other_exp select.exp_value');
+    if (directSel) {
+      addCandidate(directSel, null);
+    }
 
+    let filledAny = false;
+    for (const { selectEl, row } of candidateEntries) {
       const qText = findRowQuestionText(row, selectEl);
-      let target = '';
-      if (/\bcomputer\b|proficiency\s+in\s+operating|relevant\s+field|কম্পিউটার/i.test(qText)) {
-        target = data.other_computer_proficiency || '';
-      } else if (/\btyping\b|\bshorthand\b|\bstenograph|\bspeed\b|\bwpm\b|টাইপ|মুদ্রাক্ষর|সাঁটলিপি/i.test(qText)) {
-        target = data.other_typing_speed || '';
-      } else {
-        target = data.other_default_response || '';
+      if (
+        COMPUTER_Q_REGEX.test(qText) ||
+        selectEl.name === 'other_exp[0][value]' ||
+        selectEl.id === 'other_exp[0][value]'
+      ) {
+        if (selectOptionSmart(selectEl, 'Yes', stats)) {
+          filledAny = true;
+        }
       }
+    }
 
-      if (!target) continue;
+    // Legacy label-based scan across document when Other Experiences uses custom row markup
+    if (!filledAny) {
+      for (const lbl of Array.from(document.querySelectorAll('label'))) {
+        if (!COMPUTER_Q_REGEX.test(lbl.textContent || '')) continue;
+        const sel = findControlNearLabel(lbl, 'select');
+        if (sel && !seenSelects.has(sel)) {
+          seenSelects.add(sel);
+          if (selectOptionSmart(sel, 'Yes', stats)) {
+            filledAny = true;
+          }
+        }
+      }
+    }
 
-      const ok = selectOptionSmart(selectEl, target, stats);
-      if (ok && normalizeText(target) === 'yes' && data.other_exp_details) {
-        const detailEl = await waitForVisibleAndEnabled(
-          () => Array.from(row.querySelectorAll('input, textarea')).find((el) => matchesKind(el, 'text') && isElementInteractive(el)),
-          600
-        );
-        if (detailEl && isElementInteractive(detailEl) && !String(detailEl.value || '').trim()) {
-          fillTextField(detailEl, data.other_exp_details, stats);
+    // Single-Yes #otherExpSection fallback when wording differs slightly
+    if (!filledAny) {
+      const scopedOther = otherSectionById || (otherContainer && otherContainer !== document ? otherContainer : null);
+      if (scopedOther) {
+        const selectsInSection = Array.from(scopedOther.querySelectorAll('select'));
+        if (selectsInSection.length === 1) {
+          const singleSel = selectsInSection[0];
+          const nonPlaceholderOpts = Array.from(singleSel.options || []).filter((opt) => {
+            const normVal = normalizeText(opt.value || '');
+            const normTxt = normalizeText(opt.textContent || '');
+            return (normVal !== '' || normTxt !== '') && normTxt !== 'select' && normTxt !== 'choose';
+          });
+          if (
+            nonPlaceholderOpts.length === 1 &&
+            normalizeText(nonPlaceholderOpts[0].textContent || nonPlaceholderOpts[0].value) === 'yes'
+          ) {
+            selectOptionSmart(singleSel, 'Yes', stats);
+          }
         }
       }
     }
@@ -1803,7 +1925,8 @@
     const data = profileData || {};
     const stats = {
       filledCount: 0,
-      mismatchedElements: new Set()
+      mismatchedElements: new Set(),
+      missingJobProfileData: false
     };
 
     clearPreviousHighlights();
@@ -1955,12 +2078,20 @@
     highlightMissingRequiredFields(stats);
 
     const warningCount = stats.mismatchedElements.size;
+    const missingJobData = Boolean(stats.missingJobProfileData);
     if (stats.filledCount === 0) {
       showToast(
         '⚠️ No Teletalk application fields detected',
         'Open the full Teletalk application form page and try again.',
         'warn',
         8000
+      );
+    } else if (missingJobData) {
+      showToast(
+        `✅ Autofill Complete! Filled ${stats.filledCount} field(s).`,
+        '⚠️ "If Applicable" is checked in Job Experiences, but your profile has no Job Experience saved — open Extension Options to add it.',
+        'warn',
+        10500
       );
     } else if (warningCount > 0) {
       showToast(
@@ -1981,16 +2112,28 @@
     return {
       ok: true,
       filledCount: stats.filledCount,
-      warningCount
+      warningCount,
+      missingJobProfileData: missingJobData
     };
   }
 
-  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+  if (
+    typeof chrome !== 'undefined' &&
+    chrome.runtime &&
+    chrome.runtime.onMessage &&
+    !(typeof window !== 'undefined' && window.__TELETALK_JOBS_FILLER_LISTENER_BOUND__)
+  ) {
+    if (typeof window !== 'undefined') {
+      window.__TELETALK_JOBS_FILLER_LISTENER_BOUND__ = true;
+    }
     chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (!message || message.action !== 'TJF_AUTOFILL') {
         return false;
       }
-      autofillForm(message.profile, message.profileName)
+      const runAutofill =
+        (typeof window !== 'undefined' && window.__TJF_ENGINE__ && window.__TJF_ENGINE__.autofillForm) ||
+        autofillForm;
+      runAutofill(message.profile, message.profileName)
         .then((res) => sendResponse(res))
         .catch((err) => {
           showToast('❌ Autofill encountered an error', err.message || 'Please review the page.', 'warn', 8000);
@@ -2000,9 +2143,10 @@
     });
   }
 
-  // Expose internal engine for automated verification scripts without polluting production runtime
+  // Expose internal engine for automated verification scripts & hot re-injection
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
+      version: '1.1.1',
       autofillForm,
       findMatchingOption,
       selectOptionSmart,
@@ -2013,6 +2157,7 @@
     };
   } else if (typeof window !== 'undefined') {
     window.__TJF_ENGINE__ = {
+      version: '1.1.1',
       autofillForm,
       findMatchingOption,
       selectOptionSmart,

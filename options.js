@@ -95,6 +95,7 @@
   let currentState = null;
   let isDirty = false;
   let toastTimer = null;
+  let autoSaveTimer = null;
   let modalResolve = null;
   let lastAutoMobile = '';
 
@@ -130,8 +131,13 @@
     const list = Array.isArray(items) ? items : [];
     for (const item of list) {
       const opt = document.createElement('option');
-      opt.value = item;
-      opt.textContent = item;
+      if (item && typeof item === 'object') {
+        opt.value = String(item.value ?? '');
+        opt.textContent = String(item.label ?? item.value ?? '');
+      } else {
+        opt.value = item;
+        opt.textContent = item;
+      }
       sel.appendChild(opt);
     }
 
@@ -194,26 +200,46 @@
     populateSelect('mas_year', TD.PASSING_YEARS);
     populateSelect('mas_duration', TD.MAS_DURATIONS);
 
-    populateSelect('other_computer_proficiency', TD.YES_NO, '', 'Select');
-    populateSelect('other_typing_speed', TD.YES_NO, '', 'Select');
-    populateSelect('other_default_response', TD.YES_NO, '', 'Leave empty (Do not auto-answer)');
+    populateSelect(
+      'other_computer_proficiency',
+      [
+        { value: 'Skip', label: 'Select' },
+        { value: 'Yes', label: 'Yes' }
+      ],
+      'Yes',
+      null
+    );
+  }
+
+  function syncFilledControlStyles() {
+    if (!els.profileForm) return;
+    for (const el of els.profileForm.querySelectorAll('.form-control')) {
+      const rawVal = String(el.value || '').trim();
+      const isPlaceholderChoice = el.id === 'other_computer_proficiency' && rawVal === 'Skip';
+      const hasVal = !el.disabled && rawVal !== '' && !isPlaceholderChoice;
+      el.classList.toggle('has-val', hasVal);
+    }
   }
 
   function updateJobCardCounter(textarea, counterEl) {
     if (!textarea || !counterEl) return;
     const len = String(textarea.value || '').length;
-    counterEl.textContent = `${len} / 300`;
+    counterEl.textContent = String(Math.max(0, 300 - len));
     counterEl.classList.toggle('near-limit', len >= 270);
   }
 
   function buildJobFormGroup(labelText, controlEl, extraClass = '') {
-    const group = document.createElement('div');
-    group.className = extraClass ? `form-group ${extraClass}` : 'form-group';
+    const row = document.createElement('div');
+    row.className = extraClass ? `tt-form-row ${extraClass}` : 'tt-form-row';
     const label = document.createElement('label');
+    label.className = 'tt-label';
     label.textContent = labelText;
-    group.appendChild(label);
-    group.appendChild(controlEl);
-    return group;
+    const col = document.createElement('div');
+    col.className = 'tt-control-col';
+    col.appendChild(controlEl);
+    row.appendChild(label);
+    row.appendChild(col);
+    return row;
   }
 
   function collectJobExperiences() {
@@ -242,58 +268,43 @@
     card.className = 'job-exp-item';
     card.dataset.jobIndex = String(index);
 
-    // Header
-    const header = document.createElement('div');
-    header.className = 'job-exp-header';
-
-    const badge = document.createElement('div');
-    badge.className = 'job-exp-badge';
-    const numSpan = document.createElement('span');
-    numSpan.className = 'job-exp-index';
-    numSpan.textContent = String(index + 1);
-    const titleSpan = document.createElement('span');
-    titleSpan.textContent = `Job Experience #${index + 1}`;
-    badge.appendChild(numSpan);
-    badge.appendChild(titleSpan);
-    header.appendChild(badge);
+    const badge = document.createElement('span');
+    badge.className = 'job-sl-badge';
+    badge.textContent = String(index + 1);
+    card.appendChild(badge);
 
     if (totalCount > 1) {
+      const topbar = document.createElement('div');
+      topbar.className = 'job-item-topbar';
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
-      removeBtn.className = 'btn btn-danger-outline btn-sm';
-      removeBtn.textContent = 'Remove';
+      removeBtn.className = 'tt-remove-job-btn';
+      removeBtn.textContent = '✕ Remove';
       removeBtn.addEventListener('click', () => {
         const jobs = collectJobExperiences();
         jobs.splice(index, 1);
         renderJobExperiences(jobs);
         refreshConditionalVisibility();
         setDirty(true);
+        scheduleAutoSave();
       });
-      header.appendChild(removeBtn);
+      topbar.appendChild(removeBtn);
+      card.appendChild(topbar);
     }
-    card.appendChild(header);
 
-    const grid = document.createElement('div');
-    grid.className = 'form-grid two-col';
+    const twoCol = document.createElement('div');
+    twoCol.className = 'tt-two-col';
 
-    // Employed on
+    // Left column (Employed on, Designation/Post, Length of Service)
+    const leftCol = document.createElement('div');
+    leftCol.className = 'tt-compact-rows';
+
     const empSelect = document.createElement('select');
     empSelect.className = 'form-control';
     empSelect.dataset.jobField = 'employment_type';
-    populateSelectElement(empSelect, TD.EMPLOYMENT_TYPES, norm.employment_type, 'Select Employment Type');
-    grid.appendChild(buildJobFormGroup('Employed on', empSelect));
+    populateSelectElement(empSelect, TD.EMPLOYMENT_TYPES, norm.employment_type, 'Select');
+    leftCol.appendChild(buildJobFormGroup('Employed on', empSelect));
 
-    // Organization
-    const orgInput = document.createElement('input');
-    orgInput.type = 'text';
-    orgInput.className = 'form-control';
-    orgInput.maxLength = 100;
-    orgInput.placeholder = 'e.g. Company / Organization Name';
-    orgInput.dataset.jobField = 'organization';
-    orgInput.value = norm.organization;
-    grid.appendChild(buildJobFormGroup('Organization', orgInput));
-
-    // Designation / Post
     const desInput = document.createElement('input');
     desInput.type = 'text';
     desInput.className = 'form-control';
@@ -301,9 +312,74 @@
     desInput.placeholder = 'e.g. IT Officer / Assistant Manager';
     desInput.dataset.jobField = 'designation';
     desInput.value = norm.designation;
-    grid.appendChild(buildJobFormGroup('Designation / Post', desInput));
+    leftCol.appendChild(buildJobFormGroup('Designation/Post', desInput));
 
-    // Office Address
+    const serviceRow = document.createElement('div');
+    serviceRow.className = 'tt-form-row';
+    const serviceLabel = document.createElement('label');
+    serviceLabel.className = 'tt-label';
+    serviceLabel.textContent = 'Length of Service';
+    const serviceCol = document.createElement('div');
+    serviceCol.className = 'tt-control-col';
+
+    const serviceDates = document.createElement('div');
+    serviceDates.className = 'tt-service-dates';
+
+    const startInput = document.createElement('input');
+    startInput.type = 'date';
+    startInput.className = 'form-control tt-date-input';
+    startInput.dataset.jobField = 'job_start_date';
+    startInput.value = norm.job_start_date;
+
+    const toSpan = document.createElement('span');
+    toSpan.className = 'tt-date-to';
+    toSpan.textContent = 'to';
+
+    const endWrap = document.createElement('div');
+    endWrap.className = 'tt-end-wrap';
+
+    const endInput = document.createElement('input');
+    endInput.type = 'date';
+    endInput.className = 'form-control tt-date-input';
+    endInput.dataset.jobField = 'job_end_date';
+    endInput.value = norm.job_end_date;
+
+    const cwLabel = document.createElement('label');
+    cwLabel.className = 'tt-curr-work';
+    const cwCheck = document.createElement('input');
+    cwCheck.type = 'checkbox';
+    cwCheck.dataset.jobField = 'currently_working';
+    cwCheck.checked = norm.currently_working;
+    cwCheck.addEventListener('change', refreshConditionalVisibility);
+    const cwText = document.createElement('span');
+    cwText.textContent = 'CurrentlyWorking';
+    cwLabel.appendChild(cwCheck);
+    cwLabel.appendChild(cwText);
+
+    endWrap.appendChild(endInput);
+    endWrap.appendChild(cwLabel);
+
+    serviceDates.appendChild(startInput);
+    serviceDates.appendChild(toSpan);
+    serviceDates.appendChild(endWrap);
+    serviceCol.appendChild(serviceDates);
+    serviceRow.appendChild(serviceLabel);
+    serviceRow.appendChild(serviceCol);
+    leftCol.appendChild(serviceRow);
+
+    // Right column (Organization, Address, Last Salary)
+    const rightCol = document.createElement('div');
+    rightCol.className = 'tt-compact-rows';
+
+    const orgInput = document.createElement('input');
+    orgInput.type = 'text';
+    orgInput.className = 'form-control';
+    orgInput.maxLength = 100;
+    orgInput.placeholder = 'Company / Organization Name';
+    orgInput.dataset.jobField = 'organization';
+    orgInput.value = norm.organization;
+    rightCol.appendChild(buildJobFormGroup('Organization', orgInput));
+
     const addrInput = document.createElement('input');
     addrInput.type = 'text';
     addrInput.className = 'form-control';
@@ -311,74 +387,32 @@
     addrInput.placeholder = 'Office Street, Road, Area, District';
     addrInput.dataset.jobField = 'office_address';
     addrInput.value = norm.office_address;
-    grid.appendChild(buildJobFormGroup('Office Address', addrInput));
+    rightCol.appendChild(buildJobFormGroup('Address', addrInput));
 
-    // Length of Service + Currently Working
-    const serviceWrap = document.createElement('div');
-    serviceWrap.className = 'form-group';
-    const serviceLabel = document.createElement('label');
-    serviceLabel.textContent = 'Length of Service';
-    serviceWrap.appendChild(serviceLabel);
-
-    const dateRow = document.createElement('div');
-    dateRow.className = 'date-range-row';
-
-    const startInput = document.createElement('input');
-    startInput.type = 'date';
-    startInput.className = 'form-control';
-    startInput.dataset.jobField = 'job_start_date';
-    startInput.value = norm.job_start_date;
-
-    const toSpan = document.createElement('span');
-    toSpan.className = 'date-range-sep';
-    toSpan.textContent = 'to';
-
-    const endInput = document.createElement('input');
-    endInput.type = 'date';
-    endInput.className = 'form-control';
-    endInput.dataset.jobField = 'job_end_date';
-    endInput.value = norm.job_end_date;
-
-    dateRow.appendChild(startInput);
-    dateRow.appendChild(toSpan);
-    dateRow.appendChild(endInput);
-    serviceWrap.appendChild(dateRow);
-
-    const cwLabel = document.createElement('label');
-    cwLabel.className = 'currently-working-inline';
-    const cwCheck = document.createElement('input');
-    cwCheck.type = 'checkbox';
-    cwCheck.dataset.jobField = 'currently_working';
-    cwCheck.checked = norm.currently_working;
-    cwCheck.addEventListener('change', refreshConditionalVisibility);
-    const cwText = document.createElement('span');
-    cwText.textContent = 'Currently Working';
-    cwLabel.appendChild(cwCheck);
-    cwLabel.appendChild(cwText);
-    serviceWrap.appendChild(cwLabel);
-    grid.appendChild(serviceWrap);
-
-    // Optional Last Drawn Salary
     const salaryInput = document.createElement('input');
     salaryInput.type = 'text';
     salaryInput.className = 'form-control';
     salaryInput.maxLength = 30;
-    salaryInput.placeholder = 'Optional (e.g. 35000)';
+    salaryInput.placeholder = 'Optional';
     salaryInput.dataset.jobField = 'last_salary';
     salaryInput.value = norm.last_salary;
-    const salaryGroup = buildJobFormGroup('Last Drawn Salary (Optional)', salaryInput);
-    const salaryHint = document.createElement('span');
-    salaryHint.className = 'field-hint';
-    salaryHint.textContent = 'Filled automatically only if the portal displays a salary field.';
-    salaryGroup.appendChild(salaryHint);
-    grid.appendChild(salaryGroup);
+    rightCol.appendChild(buildJobFormGroup('Last Salary', salaryInput));
 
-    // Job Description
-    const descGroup = document.createElement('div');
-    descGroup.className = 'form-group full-width';
+    twoCol.appendChild(leftCol);
+    twoCol.appendChild(rightCol);
+    card.appendChild(twoCol);
+
+    // Bottom full-width Job Description row
+    const descRow = document.createElement('div');
+    descRow.className = 'tt-desc-row';
+
     const descLabel = document.createElement('label');
+    descLabel.className = 'tt-label';
     descLabel.textContent = 'Job Description';
-    descGroup.appendChild(descLabel);
+    descRow.appendChild(descLabel);
+
+    const descField = document.createElement('div');
+    descField.className = 'tt-control-col tt-desc-field';
 
     const descTextarea = document.createElement('textarea');
     descTextarea.className = 'form-control';
@@ -387,23 +421,17 @@
     descTextarea.placeholder = 'Short summary of duties and responsibilities (max 300 characters)';
     descTextarea.dataset.jobField = 'job_description';
     descTextarea.value = norm.job_description;
-    descGroup.appendChild(descTextarea);
+    descField.appendChild(descTextarea);
 
-    const metaRow = document.createElement('div');
-    metaRow.className = 'desc-meta-row';
-    const descHint = document.createElement('span');
-    descHint.className = 'field-hint';
-    descHint.textContent = 'Teletalk limits Job Description to 300 characters and blocks paste — our extension fills it safely.';
     const counter = document.createElement('span');
     counter.className = 'char-counter';
     updateJobCardCounter(descTextarea, counter);
     descTextarea.addEventListener('input', () => updateJobCardCounter(descTextarea, counter));
-    metaRow.appendChild(descHint);
-    metaRow.appendChild(counter);
-    descGroup.appendChild(metaRow);
-    grid.appendChild(descGroup);
+    descField.appendChild(counter);
 
-    card.appendChild(grid);
+    descRow.appendChild(descField);
+    card.appendChild(descRow);
+
     return card;
   }
 
@@ -475,6 +503,8 @@
     // Same as Present Address lock & sync
     const sameChecked = els.same_as_present.checked;
     els.permanentAddressBody.classList.toggle('section-disabled', sameChecked);
+    const permCard = document.getElementById('cardPermanentAddress');
+    if (permCard) permCard.classList.toggle('fieldset-disabled', sameChecked);
     for (const id of PERMANENT_FIELD_IDS) {
       const field = document.getElementById(id);
       if (field) field.disabled = sameChecked;
@@ -483,6 +513,8 @@
     // Graduation If Applicable toggle
     const graOn = els.gra_applicable.checked;
     els.graFieldsWrap.classList.toggle('section-disabled', !graOn);
+    const graCard = document.getElementById('cardGraduation');
+    if (graCard) graCard.classList.toggle('fieldset-disabled', !graOn);
     for (const id of GRA_FIELD_IDS) {
       const field = document.getElementById(id);
       if (field) field.disabled = !graOn;
@@ -491,6 +523,8 @@
     // Masters If Applicable toggle
     const masOn = els.mas_applicable.checked;
     els.masFieldsWrap.classList.toggle('section-disabled', !masOn);
+    const masCard = document.getElementById('cardMasters');
+    if (masCard) masCard.classList.toggle('fieldset-disabled', !masOn);
     for (const id of MAS_FIELD_IDS) {
       const field = document.getElementById(id);
       if (field) field.disabled = !masOn;
@@ -500,6 +534,9 @@
     if (els.exp_applicable && els.expFieldsWrap) {
       const expOn = els.exp_applicable.checked;
       els.expFieldsWrap.classList.toggle('section-disabled', !expOn);
+      const expCard = document.getElementById('cardJobExperience');
+      if (expCard) expCard.classList.toggle('fieldset-disabled', !expOn);
+      if (els.btnAddJobExp) els.btnAddJobExp.disabled = !expOn;
       for (const ctrl of els.expFieldsWrap.querySelectorAll('input, select, textarea, button')) {
         ctrl.disabled = !expOn;
       }
@@ -513,6 +550,8 @@
         }
       }
     }
+
+    syncFilledControlStyles();
   }
 
   function syncPresentToPermanent() {
@@ -540,7 +579,12 @@
     }
 
     const active = state.profiles.find((p) => p.id === state.activeProfileId) || state.profiles[0];
-    const count = Storage.countFilledFields(active.data);
+    updateProfileStatsText(active.data);
+  }
+
+  function updateProfileStatsText(data) {
+    if (!els.profileStats) return;
+    const count = Storage.countFilledFields(data);
     els.profileStats.textContent = `${count} field${count === 1 ? '' : 's'} saved`;
   }
 
@@ -625,7 +669,39 @@
     return Storage.normalizeProfileData(raw);
   }
 
+  async function persistDraftSilently() {
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = null;
+    }
+    if (!currentState) return;
+    const active = currentState.profiles.find((p) => p.id === currentState.activeProfileId) || currentState.profiles[0];
+    if (!active) return;
+
+    const data = collectFormData();
+    try {
+      const res = await Storage.updateProfile(active.id, active.profileName, data);
+      currentState = res.state;
+      updateProfileStatsText(res.profile.data);
+      setDirty(false);
+    } catch (_err) {
+      // Keep dirty badge visible if silent persistence fails
+    }
+  }
+
+  function scheduleAutoSave() {
+    if (autoSaveTimer) clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(() => {
+      autoSaveTimer = null;
+      persistDraftSilently();
+    }, 350);
+  }
+
   async function saveCurrentProfile() {
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = null;
+    }
     if (!currentState) return;
     const active = currentState.profiles.find((p) => p.id === currentState.activeProfileId) || currentState.profiles[0];
     const data = collectFormData();
@@ -913,6 +989,7 @@
         renderJobExperiences(jobs);
         refreshConditionalVisibility();
         setDirty(true);
+        scheduleAutoSave();
       });
     }
 
@@ -923,9 +1000,28 @@
       }
     }
 
-    // Track dirty state on any form edit
-    els.profileForm.addEventListener('input', () => setDirty(true));
-    els.profileForm.addEventListener('change', () => setDirty(true));
+    // Track dirty state, live valid border styling, and debounced auto-save on any form edit
+    els.profileForm.addEventListener('input', () => {
+      syncFilledControlStyles();
+      setDirty(true);
+      scheduleAutoSave();
+    });
+    els.profileForm.addEventListener('change', () => {
+      syncFilledControlStyles();
+      setDirty(true);
+      scheduleAutoSave();
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && (isDirty || autoSaveTimer)) {
+        persistDraftSilently();
+      }
+    });
+    window.addEventListener('pagehide', () => {
+      if (isDirty || autoSaveTimer) {
+        persistDraftSilently();
+      }
+    });
   }
 
   async function init() {

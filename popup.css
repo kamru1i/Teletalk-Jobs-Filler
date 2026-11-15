@@ -1,11 +1,18 @@
 :root {
-  --emerald-50: #ecfdf5;
-  --emerald-100: #d1fae5;
-  --emerald-200: #a7f3d0;
-  --emerald-500: #10b981;
-  --emerald-600: #059669;
-  --emerald-700: #047857;
-  --emerald-800: #065f46;
+  --tt-banner-green: #4f9a67;
+  --tt-nav-green: #328a4e;
+  --tt-nav-active: #2e6a48;
+  --tt-border-dark: #00803e;
+  --tt-legend-sage: #84b895;
+  --tt-valid-green: #28a745;
+  --tt-bg-page: #e8e8e8;
+  --emerald-50: #edf6f0;
+  --emerald-100: #d9ecdf;
+  --emerald-200: #b7dec4;
+  --emerald-500: #4f9a67;
+  --emerald-600: #328a4e;
+  --emerald-700: #2e6a48;
+  --emerald-800: #00803e;
   --slate-50: #f8fafc;
   --slate-100: #f1f5f9;
   --slate-200: #e2e8f0;
@@ -32,7 +39,7 @@
 body {
   width: 368px;
   font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
-  background: var(--slate-50);
+  background: var(--tt-bg-page);
   color: var(--slate-800);
   font-size: 13px;
   line-height: 1.45;
@@ -51,8 +58,26 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--slate-200);
+  padding: 10px 12px;
+  background: var(--tt-banner-green);
+  border-top: 4px solid var(--tt-border-dark);
+  border-bottom: 3px solid var(--tt-nav-green);
+  border-radius: 4px;
+  color: #ffffff;
+}
+
+.popup-header .brand-text h1 {
+  color: #ffffff;
+}
+
+.popup-header .subtitle {
+  color: #e6f4ea;
+}
+
+.popup-header .site-badge {
+  background: rgba(255, 255, 255, 0.92);
+  color: #1e293b;
+  border-color: rgba(255, 255, 255, 0.95);
 }
 
 .brand {

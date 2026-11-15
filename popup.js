@@ -114,6 +114,8 @@
     if (active.data.mobile) metaParts.push(active.data.mobile);
     if (active.data.present_district) metaParts.push(active.data.present_district);
     if (active.data.ssc_year) metaParts.push(`SSC ${active.data.ssc_year}`);
+    if (active.data.exp_applicable) metaParts.push('Job Exp ✓');
+    if (active.data.other_computer_proficiency === 'Yes') metaParts.push('Computer: Yes');
 
     const metaEl = document.createElement('div');
     metaEl.className = 'summary-meta';
@@ -133,6 +135,10 @@
 
   async function handleAutofill() {
     hideStatus();
+    if (window.TJFStorage && typeof window.TJFStorage.getState === 'function') {
+      currentState = await window.TJFStorage.getState();
+      renderProfileList(currentState);
+    }
     if (!currentState) return;
 
     const active = currentState.profiles.find((p) => p.id === currentState.activeProfileId) || currentState.profiles[0];
@@ -158,21 +164,41 @@
     try {
       let response = null;
       try {
-        response = await sendAutofillMessage(tab.id, active);
-      } catch (_firstErr) {
-        // Content script might not be loaded yet (e.g. tab opened before install or local test file)
+        // Always re-inject latest filler engine first so already-open tabs never stay stuck on stale scripts
         await chrome.scripting.executeScript({
           target: { tabId: tab.id },
           files: ['filler.js']
         });
+        const execResults = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: (profileData, profileName) => {
+            if (window.__TJF_ENGINE__ && typeof window.__TJF_ENGINE__.autofillForm === 'function') {
+              return window.__TJF_ENGINE__.autofillForm(profileData, profileName);
+            }
+            return null;
+          },
+          args: [active.data, active.profileName]
+        });
+        response = execResults && execResults[0] ? execResults[0].result : null;
+      } catch (_execErr) {
+        response = await sendAutofillMessage(tab.id, active);
+      }
+
+      if (!response) {
         response = await sendAutofillMessage(tab.id, active);
       }
 
       if (response && response.ok) {
         const filled = response.filledCount || 0;
         const warnings = response.warningCount || 0;
+        const missingJob = Boolean(response.missingJobProfileData);
         if (filled === 0) {
           showStatus('No matching application fields were found on this page. Make sure the application form is open.', 'warn');
+        } else if (missingJob) {
+          showStatus(
+            `Autofilled ${filled} fields, but Job Experiences "If Applicable" is checked with no job data in "${active.profileName}". Open Edit / Manage Saved Data to add it.`,
+            'warn'
+          );
         } else {
           const reviewNote = warnings > 0 ? ` • ${warnings} field(s) highlighted in yellow to review.` : '. Please review & enter Captcha.';
           showStatus(`Autofilled ${filled} fields using "${active.profileName}"${reviewNote}`, 'success');

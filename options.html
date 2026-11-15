@@ -7,38 +7,50 @@
   <link rel="stylesheet" href="options.css">
 </head>
 <body>
-  <!-- Sticky Top Bar -->
+  <!-- Sticky Teletalk-Themed Header & Navbar -->
   <header class="topbar">
-    <div class="topbar-inner">
-      <div class="brand">
-        <img src="icons/icon48.png" alt="Teletalk Jobs Filler" class="brand-logo">
-        <div>
-          <h1>Teletalk Jobs Filler</h1>
-          <p class="tagline">Manage Applicant Profiles • Stored 100% locally in your browser</p>
+    <div class="tt-banner">
+      <div class="topbar-inner">
+        <div class="brand">
+          <img src="icons/icon48.png" alt="Teletalk Jobs Filler" class="brand-logo">
+          <div>
+            <p class="portal-overline">Government Job Application Profile Manager • 100% Local Storage</p>
+            <h1>Teletalk Jobs Filler</h1>
+          </div>
         </div>
-      </div>
 
-      <div class="topbar-actions">
-        <span id="unsavedBadge" class="unsaved-badge hidden">● Unsaved changes</span>
-        <button type="button" id="btnExport" class="btn btn-outline">📤 Export Backup (JSON)</button>
-        <button type="button" id="btnImport" class="btn btn-outline">📥 Import Backup</button>
-        <input type="file" id="fileImport" accept=".json,application/json" hidden>
-        <button type="button" id="btnSaveProfile" class="btn btn-primary">💾 Save Profile</button>
+        <div class="topbar-actions">
+          <span id="unsavedBadge" class="unsaved-badge hidden">● Unsaved changes</span>
+          <button type="button" id="btnExport" class="btn btn-banner-outline">📤 Export Backup (JSON)</button>
+          <button type="button" id="btnImport" class="btn btn-banner-outline">📥 Import Backup</button>
+          <input type="file" id="fileImport" accept=".json,application/json" hidden>
+          <button type="button" id="btnSaveProfile" class="btn btn-banner-save">💾 Save Profile</button>
+        </div>
       </div>
     </div>
 
-    <!-- Profile Management Bar -->
-    <div class="profile-bar">
-      <div class="profile-bar-left">
-        <label for="profileSelect" class="bar-label">Current Profile:</label>
-        <select id="profileSelect" class="profile-select" aria-label="Select Profile to Edit"></select>
-        <span id="profileStats" class="stats-pill">0 fields saved</span>
-      </div>
-      <div class="profile-bar-right">
-        <button type="button" id="btnNewProfile" class="btn btn-sm btn-secondary">+ New Profile</button>
-        <button type="button" id="btnRenameProfile" class="btn btn-sm btn-secondary">✏️ Rename</button>
-        <button type="button" id="btnDuplicateProfile" class="btn btn-sm btn-secondary">📋 Duplicate</button>
-        <button type="button" id="btnDeleteProfile" class="btn btn-sm btn-danger-outline">🗑️ Delete</button>
+    <!-- Dark-Green Teletalk Navigation & Profile Bar -->
+    <div class="tt-navbar">
+      <div class="tt-navbar-inner">
+        <div class="profile-controls">
+          <label for="profileSelect" class="bar-label">Profile:</label>
+          <select id="profileSelect" class="profile-select" aria-label="Select Profile to Edit"></select>
+          <span id="profileStats" class="stats-pill">0 fields saved</span>
+          <div class="profile-btn-group">
+            <button type="button" id="btnNewProfile" class="btn btn-nav-sm">+ New</button>
+            <button type="button" id="btnRenameProfile" class="btn btn-nav-sm">✏️ Rename</button>
+            <button type="button" id="btnDuplicateProfile" class="btn btn-nav-sm">📋 Copy</button>
+            <button type="button" id="btnDeleteProfile" class="btn btn-nav-danger">🗑️ Delete</button>
+          </div>
+        </div>
+
+        <nav class="tabs-nav" aria-label="Form Sections">
+          <button type="button" class="tab-btn active" data-tab="all">All Sections</button>
+          <button type="button" class="tab-btn" data-tab="basic">Basic Information</button>
+          <button type="button" class="tab-btn" data-tab="address">Address</button>
+          <button type="button" class="tab-btn" data-tab="education">Education</button>
+          <button type="button" class="tab-btn" data-tab="experience">Job &amp; Other Experiences</button>
+        </nav>
       </div>
     </div>
   </header>
@@ -56,8 +68,8 @@
     </div>
   </div>
 
-  <!-- Main Container -->
-  <main class="container">
+  <!-- Main Teletalk Form Container -->
+  <main class="tt-page-container">
     <!-- Import Prompt Banner (shown when opened via Popup Import button) -->
     <div id="importBanner" class="import-banner hidden">
       <div>
@@ -73,571 +85,633 @@
     <!-- Status Toast -->
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
-    <!-- Navigation Tabs -->
-    <nav class="tabs-nav" aria-label="Form Sections">
-      <button type="button" class="tab-btn active" data-tab="all">📋 View All Sections</button>
-      <button type="button" class="tab-btn" data-tab="basic">1. Basic Information</button>
-      <button type="button" class="tab-btn" data-tab="address">2. Address Information</button>
-      <button type="button" class="tab-btn" data-tab="education">3. Educational Qualifications</button>
-      <button type="button" class="tab-btn" data-tab="experience">4. Job &amp; Other Experiences</button>
-    </nav>
+    <form id="profileForm" class="tt-form-sheet" novalidate>
+      <fieldset class="tt-outer-fieldset">
+        <legend class="tt-outer-legend">Application Form</legend>
 
-    <form id="profileForm" novalidate>
-      <!-- SECTION 1: BASIC INFORMATION -->
-      <section class="form-card section-panel" data-section="basic">
-        <div class="card-header">
-          <div>
-            <h2>1. Basic Information</h2>
-            <p class="card-sub">Fill in your personal details exactly as printed on your academic certificates and NID.</p>
-          </div>
-          <span class="badge-tag">Personal Details</span>
-        </div>
+        <!-- SECTION 1: BASIC INFORMATION -->
+        <section class="section-panel" data-section="basic">
+          <fieldset class="tt-fieldset">
+            <legend class="tt-legend">Basic Information</legend>
 
-        <div class="card-body">
-          <div class="form-grid two-col">
-            <div class="form-group">
-              <label for="name">Applicant's Name (English)</label>
-              <input type="text" id="name" class="form-control uppercase-input" maxlength="50" placeholder="e.g. MD. KAMRUL ISLAM">
-            </div>
-
-            <div class="form-group">
-              <label for="name_bn">আবেদনকারীর নাম (বাংলায় Unicode)</label>
-              <input type="text" id="name_bn" class="form-control" maxlength="50" placeholder="যেমন: মোঃ কামরুল ইসলাম">
-            </div>
-
-            <div class="form-group">
-              <label for="father">Father's Name (English)</label>
-              <input type="text" id="father" class="form-control uppercase-input" maxlength="50" placeholder="e.g. MD. ABDUL KARIM">
-            </div>
-
-            <div class="form-group">
-              <label for="father_bn">পিতার নাম (বাংলায় Unicode)</label>
-              <input type="text" id="father_bn" class="form-control" maxlength="50" placeholder="যেমন: মোঃ আব্দুল করিম">
-            </div>
-
-            <div class="form-group">
-              <label for="mother">Mother's Name (English)</label>
-              <input type="text" id="mother" class="form-control uppercase-input" maxlength="50" placeholder="e.g. MST. AMENA BEGUM">
-            </div>
-
-            <div class="form-group">
-              <label for="mother_bn">মাতার নাম (বাংলায় Unicode)</label>
-              <input type="text" id="mother_bn" class="form-control" maxlength="50" placeholder="যেমন: মোছাঃ আমেনা বেগম">
-            </div>
-
-            <div class="form-group">
-              <label for="dob">Date of Birth</label>
-              <input type="date" id="dob" class="form-control">
-              <span id="dobPreview" class="field-hint">Auto-converts to MM/DD/YYYY, YYYY-MM-DD, or Day/Month/Year dropdowns.</span>
-            </div>
-
-            <div class="form-group">
-              <label for="nationality">Nationality</label>
-              <select id="nationality" class="form-control">
-                <option value="Bangladeshi">Bangladeshi</option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label for="religion">Religion</label>
-              <select id="religion" class="form-control"></select>
-            </div>
-
-            <div class="form-group">
-              <label for="gender">Gender</label>
-              <select id="gender" class="form-control"></select>
-            </div>
-
-            <div class="form-group">
-              <label for="marital_status">Marital Status</label>
-              <select id="marital_status" class="form-control"></select>
-            </div>
-
-            <div class="form-group conditional-wrap hidden" id="wrap_spouse_name">
-              <label for="spouse_name">Spouse Name</label>
-              <input type="text" id="spouse_name" class="form-control uppercase-input" maxlength="50" placeholder="Spouse full name">
-            </div>
-
-            <div class="form-group">
-              <label for="nid_has">National ID (NID)</label>
-              <select id="nid_has" class="form-control"></select>
-            </div>
-
-            <div class="form-group conditional-wrap hidden" id="wrap_nid_no">
-              <label for="nid_no">National ID Number</label>
-              <input type="text" id="nid_no" inputmode="numeric" class="form-control" maxlength="20" placeholder="10, 13, or 17 digit NID">
-            </div>
-
-            <div class="form-group">
-              <label for="breg_has">Birth Registration</label>
-              <select id="breg_has" class="form-control"></select>
-            </div>
-
-            <div class="form-group conditional-wrap hidden" id="wrap_breg_no">
-              <label for="breg_no">Birth Registration Number</label>
-              <input type="text" id="breg_no" inputmode="numeric" class="form-control" maxlength="25" placeholder="17 digit Birth Registration No">
-            </div>
-
-            <div class="form-group">
-              <label for="passport_has">Passport ID</label>
-              <select id="passport_has" class="form-control"></select>
-            </div>
-
-            <div class="form-group conditional-wrap hidden" id="wrap_passport_no">
-              <label for="passport_no">Passport Number</label>
-              <input type="text" id="passport_no" class="form-control uppercase-input" maxlength="15" placeholder="e.g. A01234567">
-            </div>
-
-            <div class="form-group">
-              <label for="mobile">Mobile Number</label>
-              <input type="tel" id="mobile" class="form-control" maxlength="11" placeholder="01XXXXXXXXX">
-            </div>
-
-            <div class="form-group">
-              <label for="confirm_mobile">Confirm Mobile Number</label>
-              <input type="tel" id="confirm_mobile" class="form-control" maxlength="11" placeholder="01XXXXXXXXX">
-              <span id="mobileHint" class="field-hint">Must match Mobile Number (Teletalk disables copy-paste, we autofill both!).</span>
-            </div>
-
-            <div class="form-group">
-              <label for="email">Email Address</label>
-              <input type="email" id="email" class="form-control" maxlength="50" placeholder="example@gmail.com">
-            </div>
-
-            <div class="form-group">
-              <label for="dep_status">Departmental Status</label>
-              <select id="dep_status" class="form-control"></select>
-            </div>
-
-            <div class="form-group">
-              <label for="quota">Quota</label>
-              <select id="quota" class="form-control"></select>
-            </div>
-
-            <div class="form-group conditional-wrap hidden" id="wrap_quota_details">
-              <label for="quota_details">Quota Details (Certificate No, Date, Name)</label>
-              <input type="text" id="quota_details" class="form-control" maxlength="100" placeholder="Certificate No / Freedom Fighter Details">
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- SECTION 2: ADDRESS INFORMATION -->
-      <section class="section-panel" data-section="address">
-        <div class="address-split">
-          <!-- Present Address -->
-          <div class="form-card">
-            <div class="card-header">
-              <div>
-                <h2>2A. Present Address (বর্তমান ঠিকানা)</h2>
-                <p class="card-sub">Current mailing / residential address</p>
-              </div>
-              <span class="badge-tag">Mailing</span>
-            </div>
-
-            <div class="card-body form-grid one-col">
-              <div class="form-group">
-                <label for="present_careof">Care Of</label>
-                <input type="text" id="present_careof" class="form-control uppercase-input" maxlength="50" placeholder="Father / Guardian Name">
-              </div>
-
-              <div class="form-group">
-                <label for="present_village">Village / Road / House / Flat</label>
-                <textarea id="present_village" class="form-control uppercase-input" rows="2" maxlength="150" placeholder="House/Flat, Road/Para, Village/Ward"></textarea>
-              </div>
-
-              <div class="form-group">
-                <label for="present_district">District</label>
-                <select id="present_district" class="form-control"></select>
-              </div>
-
-              <div class="form-group">
-                <label for="present_upazila">Upazila / P.S.</label>
-                <select id="present_upazila" class="form-control"></select>
-              </div>
-
-              <div class="form-grid two-col">
-                <div class="form-group">
-                  <label for="present_post">Post Office</label>
-                  <input type="text" id="present_post" class="form-control uppercase-input" maxlength="50" placeholder="Post Office Name">
+            <div class="tt-basic-rows">
+              <div class="tt-form-row">
+                <label for="name" class="tt-label">Applicant's Name</label>
+                <div class="tt-control-col">
+                  <input type="text" id="name" class="form-control uppercase-input" maxlength="50" placeholder="e.g. MD. KAMRUL ISLAM">
                 </div>
+              </div>
 
-                <div class="form-group">
-                  <label for="present_postcode">Post Code</label>
-                  <input type="text" id="present_postcode" inputmode="numeric" class="form-control" maxlength="4" placeholder="e.g. 1207">
+              <div class="tt-form-row">
+                <label for="name_bn" class="tt-label bn-font">আবেদনকারীর নাম (বাংলায়)</label>
+                <div class="tt-control-col">
+                  <input type="text" id="name_bn" class="form-control" maxlength="50" placeholder="আবেদনকারীর নাম (বাংলায়)">
+                </div>
+              </div>
+
+              <div class="tt-form-row">
+                <label for="father" class="tt-label">Father's Name</label>
+                <div class="tt-control-col">
+                  <input type="text" id="father" class="form-control uppercase-input" maxlength="50" placeholder="e.g. MD. ABDUL KARIM">
+                </div>
+              </div>
+
+              <div class="tt-form-row">
+                <label for="father_bn" class="tt-label bn-font">পিতার নাম (বাংলায়)</label>
+                <div class="tt-control-col">
+                  <input type="text" id="father_bn" class="form-control" maxlength="50" placeholder="পিতার নাম (বাংলায়)">
+                </div>
+              </div>
+
+              <div class="tt-form-row">
+                <label for="mother" class="tt-label">Mother's Name</label>
+                <div class="tt-control-col">
+                  <input type="text" id="mother" class="form-control uppercase-input" maxlength="50" placeholder="e.g. MST. AMENA BEGUM">
+                </div>
+              </div>
+
+              <div class="tt-form-row">
+                <label for="mother_bn" class="tt-label bn-font">মাতার নাম (বাংলায়)</label>
+                <div class="tt-control-col">
+                  <input type="text" id="mother_bn" class="form-control" maxlength="50" placeholder="মাতার নাম (বাংলায়)">
+                </div>
+              </div>
+
+              <div class="tt-form-row">
+                <label for="dob" class="tt-label">Date of Birth</label>
+                <div class="tt-control-col">
+                  <input type="date" id="dob" class="form-control">
+                  <span id="dobPreview" class="field-hint">Auto-converts to MM/DD/YYYY, YYYY-MM-DD, or Day/Month/Year dropdowns.</span>
+                </div>
+              </div>
+
+              <div class="tt-form-row">
+                <label for="nationality" class="tt-label">Nationality</label>
+                <div class="tt-control-col">
+                  <select id="nationality" class="form-control">
+                    <option value="Bangladeshi">Bangladeshi</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="tt-form-row">
+                <label for="religion" class="tt-label">Religion</label>
+                <div class="tt-control-col">
+                  <select id="religion" class="form-control"></select>
+                </div>
+              </div>
+
+              <div class="tt-form-row">
+                <label for="gender" class="tt-label">Gender</label>
+                <div class="tt-control-col">
+                  <select id="gender" class="form-control"></select>
+                </div>
+              </div>
+
+              <div class="tt-form-row">
+                <label for="nid_has" class="tt-label">National ID</label>
+                <div class="tt-control-col">
+                  <div class="tt-inline-split">
+                    <select id="nid_has" class="form-control tt-short-select"></select>
+                    <div class="tt-conditional-inline conditional-wrap hidden" id="wrap_nid_no">
+                      <label for="nid_no" class="tt-bracket-label">[National ID Number]</label>
+                      <input type="text" id="nid_no" inputmode="numeric" class="form-control" maxlength="20" placeholder="10, 13, or 17 digit NID">
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tt-form-row">
+                <label for="breg_has" class="tt-label">Birth Registration</label>
+                <div class="tt-control-col">
+                  <div class="tt-inline-split">
+                    <select id="breg_has" class="form-control tt-short-select"></select>
+                    <div class="tt-conditional-inline conditional-wrap hidden" id="wrap_breg_no">
+                      <label for="breg_no" class="tt-bracket-label">[Birth Registration Number]</label>
+                      <input type="text" id="breg_no" inputmode="numeric" class="form-control" maxlength="25" placeholder="17 digit BREG No">
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tt-form-row">
+                <label for="passport_has" class="tt-label">Passport ID</label>
+                <div class="tt-control-col">
+                  <div class="tt-inline-split">
+                    <select id="passport_has" class="form-control tt-short-select"></select>
+                    <div class="tt-conditional-inline conditional-wrap hidden" id="wrap_passport_no">
+                      <label for="passport_no" class="tt-bracket-label">[Passport Number]</label>
+                      <input type="text" id="passport_no" class="form-control uppercase-input" maxlength="15" placeholder="e.g. A01234567">
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tt-form-row">
+                <label for="marital_status" class="tt-label">Marital Status</label>
+                <div class="tt-control-col">
+                  <div class="tt-inline-split">
+                    <select id="marital_status" class="form-control tt-short-select"></select>
+                    <div class="tt-conditional-inline conditional-wrap hidden" id="wrap_spouse_name">
+                      <label for="spouse_name" class="tt-bracket-label">[Spouse Name]</label>
+                      <input type="text" id="spouse_name" class="form-control uppercase-input" maxlength="50" placeholder="Spouse full name">
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tt-form-row">
+                <label for="mobile" class="tt-label">Mobile Number</label>
+                <div class="tt-control-col">
+                  <input type="tel" id="mobile" class="form-control" maxlength="11" placeholder="01XXXXXXXXX">
+                </div>
+              </div>
+
+              <div class="tt-form-row">
+                <label for="confirm_mobile" class="tt-label">Confirm Mobile Number</label>
+                <div class="tt-control-col">
+                  <input type="tel" id="confirm_mobile" class="form-control" maxlength="11" placeholder="01XXXXXXXXX">
+                  <span id="mobileHint" class="field-hint">Must match Mobile Number (Teletalk disables copy-paste, we autofill both!).</span>
+                </div>
+              </div>
+
+              <div class="tt-form-row">
+                <label for="email" class="tt-label">Email</label>
+                <div class="tt-control-col">
+                  <input type="email" id="email" class="form-control" maxlength="50" placeholder="example@gmail.com">
+                </div>
+              </div>
+
+              <div class="tt-form-row">
+                <label for="quota" class="tt-label">Quota</label>
+                <div class="tt-control-col">
+                  <div class="tt-inline-split">
+                    <select id="quota" class="form-control tt-med-select"></select>
+                    <div class="tt-conditional-inline conditional-wrap hidden" id="wrap_quota_details">
+                      <label for="quota_details" class="tt-bracket-label">[Quota Details]</label>
+                      <input type="text" id="quota_details" class="form-control" maxlength="100" placeholder="Certificate No / Name / Date">
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tt-form-row">
+                <label for="dep_status" class="tt-label">Departmental Status</label>
+                <div class="tt-control-col">
+                  <select id="dep_status" class="form-control"></select>
                 </div>
               </div>
             </div>
-          </div>
+          </fieldset>
+        </section>
 
-          <!-- Permanent Address -->
-          <div class="form-card">
-            <div class="card-header">
-              <div>
-                <h2>2B. Permanent Address (স্থায়ী ঠিকানা)</h2>
-                <p class="card-sub">Permanent home address</p>
-              </div>
-              <label class="checkbox-pill" for="same_as_present">
+        <!-- SECTION 2: ADDRESS INFORMATION -->
+        <section class="section-panel" data-section="address">
+          <div class="tt-address-grid">
+            <!-- Present Address -->
+            <div class="tt-fieldset-wrap">
+              <fieldset class="tt-fieldset">
+                <legend class="tt-legend">Present Address <span class="bn-font">(বর্তমান ঠিকানা)</span></legend>
+
+                <div class="tt-compact-rows">
+                  <div class="tt-form-row">
+                    <label for="present_careof" class="tt-label">Care Of</label>
+                    <div class="tt-control-col">
+                      <input type="text" id="present_careof" class="form-control uppercase-input" maxlength="50" placeholder="Father / Guardian Name">
+                    </div>
+                  </div>
+
+                  <div class="tt-form-row">
+                    <label for="present_village" class="tt-label">Village/ Road/<br>House/ Flat</label>
+                    <div class="tt-control-col">
+                      <textarea id="present_village" class="form-control uppercase-input" rows="2" maxlength="150" placeholder="House/Flat, Road/Para, Village"></textarea>
+                    </div>
+                  </div>
+
+                  <div class="tt-form-row">
+                    <label for="present_district" class="tt-label">District</label>
+                    <div class="tt-control-col">
+                      <select id="present_district" class="form-control"></select>
+                    </div>
+                  </div>
+
+                  <div class="tt-form-row">
+                    <label for="present_upazila" class="tt-label">Upazila/P.S.</label>
+                    <div class="tt-control-col">
+                      <select id="present_upazila" class="form-control"></select>
+                    </div>
+                  </div>
+
+                  <div class="tt-form-row">
+                    <label for="present_post" class="tt-label">Post Office</label>
+                    <div class="tt-control-col">
+                      <input type="text" id="present_post" class="form-control uppercase-input" maxlength="50" placeholder="Post Office Name">
+                    </div>
+                  </div>
+
+                  <div class="tt-form-row">
+                    <label for="present_postcode" class="tt-label">Post Code</label>
+                    <div class="tt-control-col">
+                      <input type="text" id="present_postcode" inputmode="numeric" class="form-control" maxlength="4" placeholder="e.g. 1207">
+                    </div>
+                  </div>
+                </div>
+              </fieldset>
+            </div>
+
+            <!-- Permanent Address -->
+            <div class="tt-fieldset-wrap">
+              <label class="tt-top-check" for="same_as_present">
                 <input type="checkbox" id="same_as_present">
                 <span>Same as Present Address</span>
               </label>
+
+              <fieldset class="tt-fieldset" id="cardPermanentAddress">
+                <legend class="tt-legend">Permanent Address <span class="bn-font">(স্থায়ী ঠিকানা)</span></legend>
+
+                <div class="tt-compact-rows" id="permanentAddressBody">
+                  <div class="tt-form-row">
+                    <label for="permanent_careof" class="tt-label">Care Of</label>
+                    <div class="tt-control-col">
+                      <input type="text" id="permanent_careof" class="form-control uppercase-input" maxlength="50" placeholder="Father / Guardian Name">
+                    </div>
+                  </div>
+
+                  <div class="tt-form-row">
+                    <label for="permanent_village" class="tt-label">Village/ Road/<br>House/ Flat</label>
+                    <div class="tt-control-col">
+                      <textarea id="permanent_village" class="form-control uppercase-input" rows="2" maxlength="150" placeholder="House/Flat, Road/Para, Village"></textarea>
+                    </div>
+                  </div>
+
+                  <div class="tt-form-row">
+                    <label for="permanent_district" class="tt-label">District</label>
+                    <div class="tt-control-col">
+                      <select id="permanent_district" class="form-control"></select>
+                    </div>
+                  </div>
+
+                  <div class="tt-form-row">
+                    <label for="permanent_upazila" class="tt-label">Upazila/P.S.</label>
+                    <div class="tt-control-col">
+                      <select id="permanent_upazila" class="form-control"></select>
+                    </div>
+                  </div>
+
+                  <div class="tt-form-row">
+                    <label for="permanent_post" class="tt-label">Post Office</label>
+                    <div class="tt-control-col">
+                      <input type="text" id="permanent_post" class="form-control uppercase-input" maxlength="50" placeholder="Post Office Name">
+                    </div>
+                  </div>
+
+                  <div class="tt-form-row">
+                    <label for="permanent_postcode" class="tt-label">Post Code</label>
+                    <div class="tt-control-col">
+                      <input type="text" id="permanent_postcode" inputmode="numeric" class="form-control" maxlength="4" placeholder="e.g. 1207">
+                    </div>
+                  </div>
+                </div>
+              </fieldset>
             </div>
+          </div>
+        </section>
 
-            <div class="card-body form-grid one-col" id="permanentAddressBody">
-              <div class="form-group">
-                <label for="permanent_careof">Care Of</label>
-                <input type="text" id="permanent_careof" class="form-control uppercase-input" maxlength="50" placeholder="Father / Guardian Name">
-              </div>
+        <!-- SECTION 3: EDUCATIONAL QUALIFICATIONS -->
+        <section class="section-panel edu-stack" data-section="education">
+          <!-- SSC / Equivalent -->
+          <div class="tt-fieldset-wrap">
+            <fieldset class="tt-fieldset">
+              <legend class="tt-legend">SSC/Equivalent Level</legend>
 
-              <div class="form-group">
-                <label for="permanent_village">Village / Road / House / Flat</label>
-                <textarea id="permanent_village" class="form-control uppercase-input" rows="2" maxlength="150" placeholder="House/Flat, Road/Para, Village/Ward"></textarea>
-              </div>
+              <div class="tt-two-col">
+                <div class="tt-compact-rows">
+                  <div class="tt-form-row">
+                    <label for="ssc_exam" class="tt-label">Examination</label>
+                    <div class="tt-control-col">
+                      <select id="ssc_exam" class="form-control"></select>
+                    </div>
+                  </div>
 
-              <div class="form-group">
-                <label for="permanent_district">District</label>
-                <select id="permanent_district" class="form-control"></select>
-              </div>
+                  <div class="tt-form-row">
+                    <label for="ssc_roll" class="tt-label">Roll No</label>
+                    <div class="tt-control-col">
+                      <input type="text" id="ssc_roll" inputmode="numeric" class="form-control" maxlength="20" placeholder="e.g. 123456">
+                    </div>
+                  </div>
 
-              <div class="form-group">
-                <label for="permanent_upazila">Upazila / P.S.</label>
-                <select id="permanent_upazila" class="form-control"></select>
-              </div>
+                  <div class="tt-form-row">
+                    <label for="ssc_group" class="tt-label">Group/Subject</label>
+                    <div class="tt-control-col">
+                      <select id="ssc_group" class="form-control"></select>
+                      <div class="conditional-wrap hidden tt-sub-other" id="wrap_ssc_group_other">
+                        <input type="text" id="ssc_group_other" class="form-control" maxlength="50" placeholder="Specify other group/subject">
+                      </div>
+                    </div>
+                  </div>
 
-              <div class="form-grid two-col">
-                <div class="form-group">
-                  <label for="permanent_post">Post Office</label>
-                  <input type="text" id="permanent_post" class="form-control uppercase-input" maxlength="50" placeholder="Post Office Name">
+                  <div class="tt-form-row">
+                    <label for="ssc_reg" class="tt-label">Reg. No <span class="opt-label">(Opt.)</span></label>
+                    <div class="tt-control-col">
+                      <input type="text" id="ssc_reg" inputmode="numeric" class="form-control" maxlength="20" placeholder="Used by forms that verify Reg No">
+                    </div>
+                  </div>
                 </div>
 
-                <div class="form-group">
-                  <label for="permanent_postcode">Post Code</label>
-                  <input type="text" id="permanent_postcode" inputmode="numeric" class="form-control" maxlength="4" placeholder="e.g. 1207">
+                <div class="tt-compact-rows">
+                  <div class="tt-form-row">
+                    <label for="ssc_board" class="tt-label">Board</label>
+                    <div class="tt-control-col">
+                      <select id="ssc_board" class="form-control"></select>
+                      <div class="conditional-wrap hidden tt-sub-other" id="wrap_ssc_board_other">
+                        <input type="text" id="ssc_board_other" class="form-control" maxlength="50" placeholder="Specify other board name">
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="tt-form-row">
+                    <label for="ssc_result_type" class="tt-label">Result</label>
+                    <div class="tt-control-col">
+                      <div class="inline-result-row">
+                        <select id="ssc_result_type" class="form-control"></select>
+                        <div class="gpa-box hidden" id="wrap_ssc_result">
+                          <input type="number" id="ssc_result" class="form-control" min="1.00" max="5.00" step="0.01" placeholder="GPA">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="tt-form-row">
+                    <label for="ssc_year" class="tt-label">Passing Year</label>
+                    <div class="tt-control-col">
+                      <select id="ssc_year" class="form-control"></select>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- SECTION 3: EDUCATIONAL QUALIFICATIONS -->
-      <section class="section-panel edu-stack" data-section="education">
-        <!-- SSC / Equivalent -->
-        <div class="form-card">
-          <div class="card-header">
-            <div>
-              <h2>3A. SSC / Equivalent Level</h2>
-              <p class="card-sub">Secondary School Certificate / Dakhil / SSC Vocational / O-Level</p>
-            </div>
-            <span class="badge-tag">SSC</span>
+            </fieldset>
           </div>
 
-          <div class="card-body form-grid two-col">
-            <div class="form-group">
-              <label for="ssc_exam">Examination</label>
-              <select id="ssc_exam" class="form-control"></select>
-            </div>
+          <!-- HSC / Equivalent -->
+          <div class="tt-fieldset-wrap">
+            <fieldset class="tt-fieldset">
+              <legend class="tt-legend">HSC/Equivalent Level</legend>
 
-            <div class="form-group">
-              <label for="ssc_board">Board</label>
-              <select id="ssc_board" class="form-control"></select>
-            </div>
+              <div class="tt-two-col">
+                <div class="tt-compact-rows">
+                  <div class="tt-form-row">
+                    <label for="hsc_exam" class="tt-label">Examination</label>
+                    <div class="tt-control-col">
+                      <select id="hsc_exam" class="form-control"></select>
+                    </div>
+                  </div>
 
-            <div class="form-group conditional-wrap hidden" id="wrap_ssc_board_other">
-              <label for="ssc_board_other">Other Board Name</label>
-              <input type="text" id="ssc_board_other" class="form-control" maxlength="50" placeholder="Specify board name">
-            </div>
+                  <div class="tt-form-row">
+                    <label for="hsc_roll" class="tt-label">Roll No</label>
+                    <div class="tt-control-col">
+                      <input type="text" id="hsc_roll" inputmode="numeric" class="form-control" maxlength="20" placeholder="e.g. 654321">
+                    </div>
+                  </div>
 
-            <div class="form-group">
-              <label for="ssc_roll">Roll No</label>
-              <input type="text" id="ssc_roll" inputmode="numeric" class="form-control" maxlength="20" placeholder="e.g. 123456">
-            </div>
+                  <div class="tt-form-row">
+                    <label for="hsc_group" class="tt-label">Group/Subject</label>
+                    <div class="tt-control-col">
+                      <select id="hsc_group" class="form-control"></select>
+                      <div class="conditional-wrap hidden tt-sub-other" id="wrap_hsc_group_other">
+                        <input type="text" id="hsc_group_other" class="form-control" maxlength="50" placeholder="Specify other group/subject">
+                      </div>
+                    </div>
+                  </div>
 
-            <div class="form-group">
-              <label for="ssc_reg">Registration No <span class="opt-label">(Optional)</span></label>
-              <input type="text" id="ssc_reg" inputmode="numeric" class="form-control" maxlength="20" placeholder="Used by forms that verify Reg No">
-            </div>
+                  <div class="tt-form-row">
+                    <label for="hsc_reg" class="tt-label">Reg. No <span class="opt-label">(Opt.)</span></label>
+                    <div class="tt-control-col">
+                      <input type="text" id="hsc_reg" inputmode="numeric" class="form-control" maxlength="20" placeholder="Used by forms that verify Reg No">
+                    </div>
+                  </div>
+                </div>
 
-            <div class="form-group">
-              <label for="ssc_result_type">Result Type</label>
-              <div class="inline-result-row">
-                <select id="ssc_result_type" class="form-control"></select>
-                <div class="gpa-box hidden" id="wrap_ssc_result">
-                  <input type="number" id="ssc_result" class="form-control" min="1.00" max="5.00" step="0.01" placeholder="GPA">
+                <div class="tt-compact-rows">
+                  <div class="tt-form-row">
+                    <label for="hsc_board" class="tt-label">Board</label>
+                    <div class="tt-control-col">
+                      <select id="hsc_board" class="form-control"></select>
+                      <div class="conditional-wrap hidden tt-sub-other" id="wrap_hsc_board_other">
+                        <input type="text" id="hsc_board_other" class="form-control" maxlength="50" placeholder="Specify other board name">
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="tt-form-row">
+                    <label for="hsc_result_type" class="tt-label">Result</label>
+                    <div class="tt-control-col">
+                      <div class="inline-result-row">
+                        <select id="hsc_result_type" class="form-control"></select>
+                        <div class="gpa-box hidden" id="wrap_hsc_result">
+                          <input type="number" id="hsc_result" class="form-control" min="1.00" max="5.00" step="0.01" placeholder="GPA">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="tt-form-row">
+                    <label for="hsc_year" class="tt-label">Passing Year</label>
+                    <div class="tt-control-col">
+                      <select id="hsc_year" class="form-control"></select>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-
-            <div class="form-group">
-              <label for="ssc_group">Group / Subject</label>
-              <select id="ssc_group" class="form-control"></select>
-            </div>
-
-            <div class="form-group conditional-wrap hidden" id="wrap_ssc_group_other">
-              <label for="ssc_group_other">Other Group / Subject</label>
-              <input type="text" id="ssc_group_other" class="form-control" maxlength="50" placeholder="Specify group/subject">
-            </div>
-
-            <div class="form-group">
-              <label for="ssc_year">Passing Year</label>
-              <select id="ssc_year" class="form-control"></select>
-            </div>
-          </div>
-        </div>
-
-        <!-- HSC / Equivalent -->
-        <div class="form-card">
-          <div class="card-header">
-            <div>
-              <h2>3B. HSC / Equivalent Level</h2>
-              <p class="card-sub">Higher Secondary Certificate / Alim / Diploma / BM / A-Level</p>
-            </div>
-            <span class="badge-tag">HSC</span>
+            </fieldset>
           </div>
 
-          <div class="card-body form-grid two-col">
-            <div class="form-group">
-              <label for="hsc_exam">Examination</label>
-              <select id="hsc_exam" class="form-control"></select>
-            </div>
-
-            <div class="form-group">
-              <label for="hsc_board">Board</label>
-              <select id="hsc_board" class="form-control"></select>
-            </div>
-
-            <div class="form-group conditional-wrap hidden" id="wrap_hsc_board_other">
-              <label for="hsc_board_other">Other Board Name</label>
-              <input type="text" id="hsc_board_other" class="form-control" maxlength="50" placeholder="Specify board name">
-            </div>
-
-            <div class="form-group">
-              <label for="hsc_roll">Roll No</label>
-              <input type="text" id="hsc_roll" inputmode="numeric" class="form-control" maxlength="20" placeholder="e.g. 654321">
-            </div>
-
-            <div class="form-group">
-              <label for="hsc_reg">Registration No <span class="opt-label">(Optional)</span></label>
-              <input type="text" id="hsc_reg" inputmode="numeric" class="form-control" maxlength="20" placeholder="Used by forms that verify Reg No">
-            </div>
-
-            <div class="form-group">
-              <label for="hsc_result_type">Result Type</label>
-              <div class="inline-result-row">
-                <select id="hsc_result_type" class="form-control"></select>
-                <div class="gpa-box hidden" id="wrap_hsc_result">
-                  <input type="number" id="hsc_result" class="form-control" min="1.00" max="5.00" step="0.01" placeholder="GPA">
-                </div>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="hsc_group">Group / Subject</label>
-              <select id="hsc_group" class="form-control"></select>
-            </div>
-
-            <div class="form-group conditional-wrap hidden" id="wrap_hsc_group_other">
-              <label for="hsc_group_other">Other Group / Subject</label>
-              <input type="text" id="hsc_group_other" class="form-control" maxlength="50" placeholder="Specify group/subject">
-            </div>
-
-            <div class="form-group">
-              <label for="hsc_year">Passing Year</label>
-              <select id="hsc_year" class="form-control"></select>
-            </div>
-          </div>
-        </div>
-
-        <!-- Graduation / Equivalent -->
-        <div class="form-card" id="cardGraduation">
-          <div class="card-header">
-            <div>
-              <h2>3C. Graduation / Equivalent Level</h2>
-              <p class="card-sub">Honors, B.Sc Engineering, MBBS/BDS, BBA, Pass Course, Fazil</p>
-            </div>
-            <label class="checkbox-pill" for="gra_applicable">
+          <!-- Graduation / Equivalent -->
+          <div class="tt-fieldset-wrap">
+            <label class="tt-top-check" for="gra_applicable">
               <input type="checkbox" id="gra_applicable">
               <span>If Applicable</span>
             </label>
-          </div>
 
-          <div class="card-body form-grid two-col" id="graFieldsWrap">
-            <div class="form-group">
-              <label for="gra_exam">Examination</label>
-              <select id="gra_exam" class="form-control"></select>
-            </div>
+            <fieldset class="tt-fieldset" id="cardGraduation">
+              <legend class="tt-legend">Graduation/Equivalent Level</legend>
 
-            <div class="form-group">
-              <label for="gra_subject">Subject / Degree</label>
-              <select id="gra_subject" class="form-control"></select>
-            </div>
+              <div class="tt-two-col" id="graFieldsWrap">
+                <div class="tt-compact-rows">
+                  <div class="tt-form-row">
+                    <label for="gra_exam" class="tt-label">Examination</label>
+                    <div class="tt-control-col">
+                      <select id="gra_exam" class="form-control"></select>
+                    </div>
+                  </div>
 
-            <div class="form-group conditional-wrap hidden" id="wrap_gra_subject_other">
-              <label for="gra_subject_other">Other Subject / Degree</label>
-              <input type="text" id="gra_subject_other" class="form-control" maxlength="100" placeholder="Specify subject/degree">
-            </div>
+                  <div class="tt-form-row">
+                    <label for="gra_institute" class="tt-label">University/Inst.</label>
+                    <div class="tt-control-col">
+                      <select id="gra_institute" class="form-control"></select>
+                      <div class="conditional-wrap hidden tt-sub-other" id="wrap_gra_institute_other">
+                        <input type="text" id="gra_institute_other" class="form-control" maxlength="100" placeholder="Specify university/institute">
+                      </div>
+                    </div>
+                  </div>
 
-            <div class="form-group">
-              <label for="gra_institute">University / Institute</label>
-              <select id="gra_institute" class="form-control"></select>
-            </div>
+                  <div class="tt-form-row">
+                    <label for="gra_year" class="tt-label">Passing Year</label>
+                    <div class="tt-control-col">
+                      <select id="gra_year" class="form-control"></select>
+                    </div>
+                  </div>
+                </div>
 
-            <div class="form-group conditional-wrap hidden" id="wrap_gra_institute_other">
-              <label for="gra_institute_other">Other University / Institute</label>
-              <input type="text" id="gra_institute_other" class="form-control" maxlength="100" placeholder="Specify university/institute">
-            </div>
+                <div class="tt-compact-rows">
+                  <div class="tt-form-row">
+                    <label for="gra_subject" class="tt-label">Subject/Degree</label>
+                    <div class="tt-control-col">
+                      <select id="gra_subject" class="form-control"></select>
+                      <div class="conditional-wrap hidden tt-sub-other" id="wrap_gra_subject_other">
+                        <input type="text" id="gra_subject_other" class="form-control" maxlength="100" placeholder="Specify subject/degree">
+                      </div>
+                    </div>
+                  </div>
 
-            <div class="form-group">
-              <label for="gra_result_type">Result Type</label>
-              <div class="inline-result-row">
-                <select id="gra_result_type" class="form-control"></select>
-                <div class="gpa-box hidden" id="wrap_gra_result">
-                  <input type="number" id="gra_result" class="form-control" min="1.00" max="5.00" step="0.01" placeholder="CGPA">
+                  <div class="tt-form-row">
+                    <label for="gra_result_type" class="tt-label">Result</label>
+                    <div class="tt-control-col">
+                      <div class="inline-result-row">
+                        <select id="gra_result_type" class="form-control"></select>
+                        <div class="gpa-box hidden" id="wrap_gra_result">
+                          <input type="number" id="gra_result" class="form-control" min="1.00" max="5.00" step="0.01" placeholder="CGPA">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="tt-form-row">
+                    <label for="gra_duration" class="tt-label">Course Duration</label>
+                    <div class="tt-control-col">
+                      <select id="gra_duration" class="form-control"></select>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-
-            <div class="form-group">
-              <label for="gra_year">Passing Year</label>
-              <select id="gra_year" class="form-control"></select>
-            </div>
-
-            <div class="form-group">
-              <label for="gra_duration">Course Duration</label>
-              <select id="gra_duration" class="form-control"></select>
-            </div>
+            </fieldset>
           </div>
-        </div>
 
-        <!-- Masters / Equivalent -->
-        <div class="form-card" id="cardMasters">
-          <div class="card-header">
-            <div>
-              <h2>3D. Masters / Equivalent Level</h2>
-              <p class="card-sub">M.A, M.S.S, M.Sc, M.Com, M.B.A, L.L.M, Kamil</p>
-            </div>
-            <label class="checkbox-pill" for="mas_applicable">
+          <!-- Masters / Equivalent -->
+          <div class="tt-fieldset-wrap">
+            <label class="tt-top-check" for="mas_applicable">
               <input type="checkbox" id="mas_applicable">
               <span>If Applicable</span>
             </label>
-          </div>
 
-          <div class="card-body form-grid two-col" id="masFieldsWrap">
-            <div class="form-group">
-              <label for="mas_exam">Examination</label>
-              <select id="mas_exam" class="form-control"></select>
-            </div>
+            <fieldset class="tt-fieldset" id="cardMasters">
+              <legend class="tt-legend">Masters/Equivalent Level</legend>
 
-            <div class="form-group">
-              <label for="mas_subject">Subject / Degree</label>
-              <select id="mas_subject" class="form-control"></select>
-            </div>
+              <div class="tt-two-col" id="masFieldsWrap">
+                <div class="tt-compact-rows">
+                  <div class="tt-form-row">
+                    <label for="mas_exam" class="tt-label">Examination</label>
+                    <div class="tt-control-col">
+                      <select id="mas_exam" class="form-control"></select>
+                    </div>
+                  </div>
 
-            <div class="form-group conditional-wrap hidden" id="wrap_mas_subject_other">
-              <label for="mas_subject_other">Other Subject / Degree</label>
-              <input type="text" id="mas_subject_other" class="form-control" maxlength="100" placeholder="Specify subject/degree">
-            </div>
+                  <div class="tt-form-row">
+                    <label for="mas_institute" class="tt-label">University/Inst.</label>
+                    <div class="tt-control-col">
+                      <select id="mas_institute" class="form-control"></select>
+                      <div class="conditional-wrap hidden tt-sub-other" id="wrap_mas_institute_other">
+                        <input type="text" id="mas_institute_other" class="form-control" maxlength="100" placeholder="Specify university/institute">
+                      </div>
+                    </div>
+                  </div>
 
-            <div class="form-group">
-              <label for="mas_institute">University / Institute</label>
-              <select id="mas_institute" class="form-control"></select>
-            </div>
+                  <div class="tt-form-row">
+                    <label for="mas_year" class="tt-label">Passing Year</label>
+                    <div class="tt-control-col">
+                      <select id="mas_year" class="form-control"></select>
+                    </div>
+                  </div>
+                </div>
 
-            <div class="form-group conditional-wrap hidden" id="wrap_mas_institute_other">
-              <label for="mas_institute_other">Other University / Institute</label>
-              <input type="text" id="mas_institute_other" class="form-control" maxlength="100" placeholder="Specify university/institute">
-            </div>
+                <div class="tt-compact-rows">
+                  <div class="tt-form-row">
+                    <label for="mas_subject" class="tt-label">Subject/Degree</label>
+                    <div class="tt-control-col">
+                      <select id="mas_subject" class="form-control"></select>
+                      <div class="conditional-wrap hidden tt-sub-other" id="wrap_mas_subject_other">
+                        <input type="text" id="mas_subject_other" class="form-control" maxlength="100" placeholder="Specify subject/degree">
+                      </div>
+                    </div>
+                  </div>
 
-            <div class="form-group">
-              <label for="mas_result_type">Result Type</label>
-              <div class="inline-result-row">
-                <select id="mas_result_type" class="form-control"></select>
-                <div class="gpa-box hidden" id="wrap_mas_result">
-                  <input type="number" id="mas_result" class="form-control" min="1.00" max="5.00" step="0.01" placeholder="CGPA">
+                  <div class="tt-form-row">
+                    <label for="mas_result_type" class="tt-label">Result</label>
+                    <div class="tt-control-col">
+                      <div class="inline-result-row">
+                        <select id="mas_result_type" class="form-control"></select>
+                        <div class="gpa-box hidden" id="wrap_mas_result">
+                          <input type="number" id="mas_result" class="form-control" min="1.00" max="5.00" step="0.01" placeholder="CGPA">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="tt-form-row">
+                    <label for="mas_duration" class="tt-label">Course Duration</label>
+                    <div class="tt-control-col">
+                      <select id="mas_duration" class="form-control"></select>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            </fieldset>
+          </div>
+        </section>
 
-            <div class="form-group">
-              <label for="mas_year">Passing Year</label>
-              <select id="mas_year" class="form-control"></select>
-            </div>
+        <!-- SECTION 4: JOB EXPERIENCES & OTHER QUALIFICATIONS -->
+        <section class="section-panel edu-stack" data-section="experience">
+          <!-- Job Experiences -->
+          <div class="tt-exp-outer">
+            <div class="tt-fieldset-wrap">
+              <label class="tt-top-check" for="exp_applicable">
+                <input type="checkbox" id="exp_applicable">
+                <span>If Applicable</span>
+              </label>
 
-            <div class="form-group">
-              <label for="mas_duration">Course Duration</label>
-              <select id="mas_duration" class="form-control"></select>
+              <fieldset class="tt-fieldset" id="cardJobExperience">
+                <legend class="tt-legend tt-legend-exp">
+                  <span>Job Experiences</span>
+                  <button type="button" id="btnAddJobExp" class="tt-add-more-btn">&#8853; ADD MORE</button>
+                </legend>
+
+                <div id="expFieldsWrap">
+                  <div id="jobExpList" class="job-exp-list"></div>
+                </div>
+              </fieldset>
             </div>
           </div>
+
+          <!-- Other Qualifications / Experiences -->
+          <div class="tt-fieldset-wrap">
+            <fieldset class="tt-fieldset" id="cardOtherExperience">
+              <legend class="tt-legend">Other Qualifications/Experiences</legend>
+
+              <div class="tt-other-exp-row">
+                <label for="other_computer_proficiency" class="tt-other-exp-label">1) Do you have Proficiency in Operating a Computer, along with working in a Relevant field?</label>
+                <div class="tt-other-exp-control">
+                  <select id="other_computer_proficiency" class="form-control"></select>
+                </div>
+              </div>
+            </fieldset>
+          </div>
+        </section>
+
+        <!-- Bottom Save Bar -->
+        <div class="bottom-save-bar">
+          <button type="submit" id="btnBottomSave" class="btn tt-submit-btn">Save Profile</button>
+          <span class="tip-text">💡 Tip: Press <kbd>Ctrl</kbd> + <kbd>S</kbd> anytime to save your profile locally.</span>
         </div>
-      </section>
-
-      <!-- SECTION 4: JOB EXPERIENCES & OTHER QUALIFICATIONS -->
-      <section class="section-panel edu-stack" data-section="experience">
-        <!-- Job Experiences -->
-        <div class="form-card" id="cardJobExperience">
-          <div class="card-header">
-            <div>
-              <h2>4A. Job Experiences (চাকরির অভিজ্ঞতা)</h2>
-              <p class="card-sub">Fill only if you want to enter prior/current job history when a circular includes Job Experiences.</p>
-            </div>
-            <label class="checkbox-pill" for="exp_applicable">
-              <input type="checkbox" id="exp_applicable">
-              <span>If Applicable</span>
-            </label>
-          </div>
-
-          <div class="card-body" id="expFieldsWrap">
-            <div id="jobExpList" class="job-exp-list"></div>
-            <div class="job-exp-actions">
-              <button type="button" id="btnAddJobExp" class="btn btn-outline">+ Add Another Job Experience</button>
-              <span class="field-hint">Tip: Extension automatically clicks Teletalk's "+ ADD MORE" button when multiple jobs are saved.</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Other Qualifications / Experiences -->
-        <div class="form-card" id="cardOtherExperience">
-          <div class="card-header">
-            <div>
-              <h2>4B. Other Qualifications / Experiences</h2>
-              <p class="card-sub">Answers circular-specific questions such as Computer Proficiency &amp; Relevant Work Experience.</p>
-            </div>
-            <span class="badge-tag">Circular Specific</span>
-          </div>
-
-          <div class="card-body form-grid two-col">
-            <div class="form-group full-width">
-              <label for="other_computer_proficiency">1) Do you have Proficiency in Operating a Computer, along with working in a Relevant field?</label>
-              <select id="other_computer_proficiency" class="form-control"></select>
-              <span class="field-hint">Directly matches Teletalk's computer proficiency &amp; relevant experience question when shown on the form.</span>
-            </div>
-
-            <div class="form-group">
-              <label for="other_typing_speed">Typing / Shorthand Speed Requirement <span class="opt-label">(Optional)</span></label>
-              <select id="other_typing_speed" class="form-control"></select>
-              <span class="field-hint">Used when a circular asks about Computer/Bangla-English Typing or Stenographer speed.</span>
-            </div>
-
-            <div class="form-group">
-              <label for="other_default_response">Fallback Answer for Other Questions <span class="opt-label">(Optional)</span></label>
-              <select id="other_default_response" class="form-control"></select>
-              <span class="field-hint">Optional Yes/No fallback for other circular-specific qualification dropdowns.</span>
-            </div>
-
-            <div class="form-group full-width">
-              <label for="other_exp_details">Additional Experience / Certificate Details <span class="opt-label">(If Asked)</span></label>
-              <input type="text" id="other_exp_details" class="form-control" maxlength="200" placeholder="e.g. MS Office / Typing Speed / Relevant Certificate details">
-              <span class="field-hint">Autofilled automatically if selecting "Yes" reveals a follow-up text box on the portal.</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Bottom Save Bar -->
-      <div class="bottom-save-bar">
-        <span class="tip-text">💡 Tip: Press <kbd>Ctrl</kbd> + <kbd>S</kbd> anytime to save your profile.</span>
-        <button type="submit" id="btnBottomSave" class="btn btn-primary btn-lg">💾 Save Profile</button>
-      </div>
+      </fieldset>
     </form>
   </main>
 

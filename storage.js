@@ -137,10 +137,7 @@
     // 4. Job Experiences & Other Qualifications / Experiences
     exp_applicable: false,
     job_experiences: [{ ...DEFAULT_JOB_EXPERIENCE_ITEM }],
-    other_computer_proficiency: '',
-    other_typing_speed: '',
-    other_default_response: '',
-    other_exp_details: ''
+    other_computer_proficiency: 'Yes'
   };
 
   const BOOLEAN_KEYS = new Set([
@@ -156,7 +153,8 @@
     breg_has: 'No',
     passport_has: 'No',
     quota: 'Not Applicable',
-    dep_status: 'Not Applicable'
+    dep_status: 'Not Applicable',
+    other_computer_proficiency: 'Yes'
   };
 
   function generateId() {
@@ -164,6 +162,12 @@
       return 'prof_' + crypto.randomUUID();
     }
     return 'prof_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+  }
+
+  function jobItemHasData(job) {
+    if (!job || typeof job !== 'object') return false;
+    if (job.currently_working === true) return true;
+    return JOB_EXPERIENCE_STRING_KEYS.some((f) => String(job[f] || '').trim() !== '');
   }
 
   function normalizeProfileData(raw) {
@@ -178,12 +182,26 @@
         } else {
           normalized.job_experiences = [{ ...DEFAULT_JOB_EXPERIENCE_ITEM }];
         }
+      } else if (key === 'other_computer_proficiency') {
+        const cleaned = String(rawVal ?? '').trim().toLowerCase();
+        if (cleaned === 'skip' || cleaned === 'no' || cleaned === '0' || cleaned === 'false' || cleaned === 'select' || cleaned === 'none') {
+          normalized.other_computer_proficiency = 'Skip';
+        } else {
+          normalized.other_computer_proficiency = 'Yes';
+        }
       } else if (BOOLEAN_KEYS.has(key)) {
         normalized[key] = rawVal === true || rawVal === 'true' || rawVal === 1 || rawVal === '1';
       } else if (rawVal === undefined || rawVal === null) {
         normalized[key] = defVal;
       } else {
         normalized[key] = String(rawVal);
+      }
+    }
+
+    // Legacy / imported compatibility: infer exp_applicable if omitted while job fields exist
+    if (source.exp_applicable === undefined && Array.isArray(normalized.job_experiences)) {
+      if (normalized.job_experiences.some(jobItemHasData)) {
+        normalized.exp_applicable = true;
       }
     }
 
@@ -403,7 +421,7 @@
     for (const key of Object.keys(DEFAULT_PROFILE_DATA)) {
       if (BOOLEAN_KEYS.has(key)) continue;
       if (key === 'job_experiences') {
-        if (Array.isArray(norm.job_experiences)) {
+        if (norm.exp_applicable && Array.isArray(norm.job_experiences)) {
           for (const job of norm.job_experiences) {
             for (const f of JOB_EXPERIENCE_STRING_KEYS) {
               if (String(job[f] || '').trim() !== '') count += 1;
@@ -419,6 +437,7 @@
       if (key === 'quota_details' && (norm.quota === 'Not Applicable' || !norm.quota)) continue;
       if (key.startsWith('gra_') && !norm.gra_applicable) continue;
       if (key.startsWith('mas_') && !norm.mas_applicable) continue;
+      if (key === 'other_computer_proficiency' && norm.other_computer_proficiency === 'Skip') continue;
       if (key.endsWith('_other') && !norm[key]) continue;
 
       const val = String(norm[key] || '').trim();
@@ -439,16 +458,14 @@
       if (key === 'job_experiences') {
         if (Array.isArray(norm.job_experiences)) {
           for (const job of norm.job_experiences) {
-            if (job.currently_working === true) return true;
-            for (const f of JOB_EXPERIENCE_STRING_KEYS) {
-              if (String(job[f] || '').trim() !== '') return true;
-            }
+            if (jobItemHasData(job)) return true;
           }
         }
         continue;
       }
       const val = String(norm[key] || '').trim();
       if (!val) continue;
+      if (key === 'other_computer_proficiency' && (val === 'Yes' || val === 'Skip')) continue;
       if (Object.prototype.hasOwnProperty.call(DEFAULT_BASELINE_VALUES, key)) {
         if (val !== DEFAULT_BASELINE_VALUES[key]) return true;
       } else {
