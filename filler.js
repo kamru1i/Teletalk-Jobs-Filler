@@ -192,8 +192,32 @@
     return Boolean(el && el.isConnected && !el.disabled && isElementVisible(el));
   }
 
+  function isCaptchaField(el) {
+    if (!el || el.nodeType !== 1) return false;
+    const meta = `${el.id || ''} ${el.name || ''} ${typeof el.className === 'string' ? el.className : ''} ${el.placeholder || ''}`.toLowerCase();
+    if (/\bcaptcha\b|captcha_|_captcha|verif(?:ication)?_?code|validation_?code|security_?code|\btxt_code\b/i.test(meta)) {
+      return true;
+    }
+
+    const fs = typeof el.closest === 'function' ? el.closest('fieldset') : null;
+    const legend = fs ? fs.querySelector('legend') : null;
+    if (legend && /^\s*verification\s*code\s*$|\bcaptcha\b|security\s*code|যাচাইকরণ\s*কোড/i.test(legend.textContent || '')) {
+      return true;
+    }
+
+    if (el.id) {
+      const lbl = Array.from(document.querySelectorAll('label')).find((l) => l.htmlFor === el.id);
+      if (lbl && /enter\s+the\s+verification\s+code|\bcaptcha\b|security\s*code/i.test(lbl.textContent || '')) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   function matchesKind(el, kind) {
     if (!el || el.nodeType !== 1) return false;
+    if (isCaptchaField(el)) return false;
     const tag = el.tagName;
     if (kind === 'select') return tag === 'SELECT';
     if (kind === 'checkbox') return tag === 'INPUT' && el.type === 'checkbox';
@@ -1908,6 +1932,7 @@
     const requiredControls = Array.from(document.querySelectorAll('input[required], select[required], textarea[required]'));
     for (const el of requiredControls) {
       if (!isElementInteractive(el)) continue;
+      if (isCaptchaField(el)) continue;
       const idOrName = ((el.id || '') + ' ' + (el.name || '')).toLowerCase();
       // Never flag the final declaration checkbox ('agree') or buttons
       if (el.type === 'checkbox' && idOrName.includes('agree')) continue;
@@ -2074,7 +2099,7 @@
     await fillJobExperiences(data, stats);
     await fillOtherExperiences(data, stats);
 
-    // Highlight any empty required inputs (such as Captcha or missing profile fields)
+    // Highlight any empty required form inputs (excluding Captcha and declaration checkbox)
     highlightMissingRequiredFields(stats);
 
     const warningCount = stats.mismatchedElements.size;
@@ -2096,14 +2121,14 @@
     } else if (warningCount > 0) {
       showToast(
         `✅ Autofill Complete! Filled ${stats.filledCount} field(s).`,
-        `⚠️ ${warningCount} field(s) highlighted in yellow (e.g. Captcha / missing info). Please review before submitting.`,
+        `⚠️ ${warningCount} field(s) highlighted in yellow (missing or unmatched info). Please review before submitting.`,
         'info',
         10000
       );
     } else {
       showToast(
         `✅ Autofill Complete! Filled ${stats.filledCount} field(s).`,
-        'Please review all entries carefully before submitting.',
+        'Please review all entries and enter the Verification Code before submitting.',
         'info',
         9000
       );
@@ -2146,7 +2171,7 @@
   // Expose internal engine for automated verification scripts & hot re-injection
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
-      version: '1.1.1',
+      version: '1.1.2',
       autofillForm,
       findMatchingOption,
       selectOptionSmart,
@@ -2157,7 +2182,7 @@
     };
   } else if (typeof window !== 'undefined') {
     window.__TJF_ENGINE__ = {
-      version: '1.1.1',
+      version: '1.1.2',
       autofillForm,
       findMatchingOption,
       selectOptionSmart,
