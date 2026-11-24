@@ -7,6 +7,13 @@
     fieldCountBadge: document.getElementById('fieldCountBadge'),
     profileSummary: document.getElementById('profileSummary'),
     statusBanner: document.getElementById('statusBanner'),
+    actionPrompt: document.getElementById('actionPrompt'),
+    promptTitle: document.getElementById('promptTitle'),
+    promptDesc: document.getElementById('promptDesc'),
+    promptInput: document.getElementById('promptInput'),
+    btnPromptPrimary: document.getElementById('btnPromptPrimary'),
+    btnPromptSecondary: document.getElementById('btnPromptSecondary'),
+    btnPromptCancel: document.getElementById('btnPromptCancel'),
     btnAutofill: document.getElementById('btnAutofill'),
     btnOpenOptions: document.getElementById('btnOpenOptions'),
     btnExport: document.getElementById('btnExport'),
@@ -18,6 +25,7 @@
   };
 
   let currentState = null;
+  let promptResolve = null;
 
   function showStatus(message, type = 'info') {
     els.statusBanner.textContent = message;
@@ -29,25 +37,98 @@
     els.statusBanner.textContent = '';
   }
 
-  function isTeletalkUrl(url) {
-    if (!url) return false;
-    try {
-      const parsed = new URL(url);
-      return parsed.hostname === 'teletalk.com.bd' || parsed.hostname.endsWith('.teletalk.com.bd');
-    } catch (_err) {
-      return false;
+  function closeActionPrompt(choice = 'cancel') {
+    const password = els.promptInput ? els.promptInput.value : '';
+    if (els.promptInput) {
+      els.promptInput.value = '';
+      els.promptInput.classList.add('hidden');
     }
+    if (els.actionPrompt) {
+      els.actionPrompt.classList.add('hidden');
+    }
+    if (promptResolve) {
+      const resolveFn = promptResolve;
+      promptResolve = null;
+      resolveFn({ choice, password });
+    }
+  }
+
+  function openActionPrompt({
+    title,
+    desc,
+    showPassword = false,
+    passwordPlaceholder = 'Optional encryption password...',
+    primaryLabel = 'Confirm',
+    secondaryLabel = '',
+    cancelLabel = 'Cancel'
+  }) {
+    if (promptResolve) {
+      closeActionPrompt('cancel');
+    }
+    return new Promise((resolve) => {
+      promptResolve = resolve;
+      els.promptTitle.textContent = title || '';
+      els.promptDesc.textContent = desc || '';
+      els.btnPromptPrimary.textContent = primaryLabel;
+
+      if (secondaryLabel) {
+        els.btnPromptSecondary.textContent = secondaryLabel;
+        els.btnPromptSecondary.classList.remove('hidden');
+      } else {
+        els.btnPromptSecondary.classList.add('hidden');
+      }
+
+      els.btnPromptCancel.textContent = cancelLabel || 'Cancel';
+
+      if (showPassword) {
+        els.promptInput.value = '';
+        els.promptInput.placeholder = passwordPlaceholder;
+        els.promptInput.classList.remove('hidden');
+      } else {
+        els.promptInput.value = '';
+        els.promptInput.classList.add('hidden');
+      }
+
+      els.actionPrompt.classList.remove('hidden');
+      if (showPassword) {
+        els.promptInput.focus();
+      } else {
+        els.btnPromptCancel.focus();
+      }
+    });
+  }
+
+  function parseTabUrl(url) {
+    if (!url) return null;
+    try {
+      return new URL(url);
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  function isTeletalkUrl(url) {
+    const parsed = parseTabUrl(url);
+    if (!parsed) return false;
+    return parsed.hostname === 'teletalk.com.bd' || parsed.hostname.endsWith('.teletalk.com.bd');
   }
 
   function isRestrictedUrl(url) {
     if (!url) return true;
+    const lower = url.toLowerCase();
     return (
-      url.startsWith('chrome://') ||
-      url.startsWith('chrome-extension://') ||
-      url.startsWith('edge://') ||
-      url.startsWith('about:') ||
-      url.startsWith('view-source:') ||
-      url.includes('chromewebstore.google.com')
+      lower.startsWith('chrome://') ||
+      lower.startsWith('chrome-extension://') ||
+      lower.startsWith('edge://') ||
+      lower.startsWith('brave://') ||
+      lower.startsWith('opera://') ||
+      lower.startsWith('vivaldi://') ||
+      lower.startsWith('devtools://') ||
+      lower.startsWith('about:') ||
+      lower.startsWith('view-source:') ||
+      lower.includes('chromewebstore.google.com') ||
+      lower.includes('chrome.google.com/webstore') ||
+      lower.includes('microsoftedge.microsoft.com/addons')
     );
   }
 
@@ -61,14 +142,22 @@
         return null;
       }
 
+      const parsed = parseTabUrl(tab.url);
       if (isTeletalkUrl(tab.url)) {
-        els.siteBadge.textContent = 'Teletalk Ready';
-        els.siteBadge.className = 'site-badge badge-teletalk';
+        if (parsed && parsed.protocol === 'http:') {
+          els.siteBadge.textContent = 'Teletalk (HTTP ⚠️)';
+          els.siteBadge.className = 'site-badge badge-http';
+          els.siteBadge.title = 'Connected over unencrypted HTTP';
+        } else {
+          els.siteBadge.textContent = 'Teletalk Ready';
+          els.siteBadge.className = 'site-badge badge-teletalk';
+          els.siteBadge.title = 'Official Teletalk domain';
+        }
       } else if (isRestrictedUrl(tab.url)) {
         els.siteBadge.textContent = 'Browser Page';
         els.siteBadge.className = 'site-badge badge-warn';
       } else {
-        els.siteBadge.textContent = 'Form Ready';
+        els.siteBadge.textContent = 'Non-Teletalk';
         els.siteBadge.className = 'site-badge badge-neutral';
       }
       return tab;
@@ -81,7 +170,7 @@
 
   function renderProfileList(state) {
     currentState = state;
-    els.profileSwitcher.innerHTML = '';
+    els.profileSwitcher.replaceChildren();
 
     for (const profile of state.profiles) {
       const opt = document.createElement('option');
@@ -97,7 +186,7 @@
     const count = window.TJFStorage.countFilledFields(active.data);
     els.fieldCountBadge.textContent = `${count} field${count === 1 ? '' : 's'} saved`;
 
-    els.profileSummary.innerHTML = '';
+    els.profileSummary.replaceChildren();
     if (!window.TJFStorage.hasMeaningfulData(active.data)) {
       const span = document.createElement('span');
       span.className = 'summary-muted';
@@ -158,17 +247,52 @@
       return;
     }
 
+    const parsedTab = parseTabUrl(tab.url);
+    const onTeletalk = isTeletalkUrl(tab.url);
+    if (!onTeletalk) {
+      const hostLabel =
+        (parsedTab && parsedTab.hostname) ||
+        (tab.url.startsWith('file://') ? 'local HTML file' : 'this external page');
+      const confirmRes = await openActionPrompt({
+        title: '⚠️ Non-Teletalk Site Detected',
+        desc: `This page (${hostLabel}) is NOT *.teletalk.com.bd. Autofilling writes your personal info (NID, DOB, Mobile, Address) to this page. Continue?`,
+        showPassword: false,
+        primaryLabel: 'Fill Anyway',
+        cancelLabel: 'Cancel'
+      });
+      if (confirmRes.choice !== 'primary') {
+        showStatus('Autofill cancelled — open a *.teletalk.com.bd application page to fill safely.', 'info');
+        return;
+      }
+    }
+
     els.btnAutofill.disabled = true;
     els.btnAutofill.querySelector('span:last-child').textContent = 'Filling Form...';
 
     try {
+      const expectedVersion =
+        chrome.runtime && typeof chrome.runtime.getManifest === 'function'
+          ? chrome.runtime.getManifest().version
+          : '1.2.0';
+
       let response = null;
+      let invokedViaExecuteScript = false;
+
       try {
-        // Always re-inject latest filler engine first so already-open tabs never stay stuck on stale scripts
-        await chrome.scripting.executeScript({
+        // Inject filler.js on demand only if missing or outdated on this tab
+        const verCheck = await chrome.scripting.executeScript({
           target: { tabId: tab.id },
-          files: ['filler.js']
+          func: (ver) => Boolean(window.__TJF_ENGINE__ && window.__TJF_ENGINE__.version === ver),
+          args: [expectedVersion]
         });
+        const isCurrentLoaded = Boolean(verCheck && verCheck[0] && verCheck[0].result);
+        if (!isCurrentLoaded) {
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ['filler.js']
+          });
+        }
+
         const execResults = await chrome.scripting.executeScript({
           target: { tabId: tab.id },
           func: (profileData, profileName) => {
@@ -180,13 +304,22 @@
           args: [active.data, active.profileName]
         });
         response = execResults && execResults[0] ? execResults[0].result : null;
+        if (response !== null && response !== undefined) {
+          invokedViaExecuteScript = true;
+        }
       } catch (_execErr) {
+        if (invokedViaExecuteScript) {
+          throw _execErr;
+        }
+      }
+
+      if (!invokedViaExecuteScript) {
         response = await sendAutofillMessage(tab.id, active);
       }
 
-      if (!response) {
-        response = await sendAutofillMessage(tab.id, active);
-      }
+      const httpNote = onTeletalk && parsedTab && parsedTab.protocol === 'http:'
+        ? ' ⚠️ (Unsecured HTTP connection)'
+        : '';
 
       if (response && response.ok) {
         const filled = response.filledCount || 0;
@@ -196,13 +329,15 @@
           showStatus('No matching application fields were found on this page. Make sure the application form is open.', 'warn');
         } else if (missingJob) {
           showStatus(
-            `Autofilled ${filled} fields, but Job Experiences "If Applicable" is checked with no job data in "${active.profileName}". Open Edit / Manage Saved Data to add it.`,
+            `Autofilled ${filled} fields, but Job Experiences "If Applicable" is checked with no job data in "${active.profileName}". Open Edit / Manage Saved Data to add it.${httpNote}`,
             'warn'
           );
         } else {
           const reviewNote = warnings > 0 ? ` • ${warnings} field(s) highlighted in yellow to review.` : '. Please review & enter Captcha.';
-          showStatus(`Autofilled ${filled} fields using "${active.profileName}"${reviewNote}`, 'success');
+          showStatus(`Autofilled ${filled} fields using "${active.profileName}"${reviewNote}${httpNote}`, 'success');
         }
+      } else if (response && response.busy) {
+        showStatus('Autofill is already running on this tab — please wait a moment.', 'info');
       } else {
         showStatus((response && response.error) || 'Could not autofill this page. Open the Teletalk application form first.', 'warn');
       }
@@ -227,20 +362,43 @@
   async function handleExport() {
     hideStatus();
     try {
-      const jsonText = await window.TJFStorage.exportBackupJson();
+      const promptRes = await openActionPrompt({
+        title: '📤 Export Backup (JSON)',
+        desc: 'Protect sensitive NID/Passport info with a password (AES-256 encrypted), or export plain JSON.',
+        showPassword: true,
+        passwordPlaceholder: 'Enter password to encrypt...',
+        primaryLabel: '🔒 Encrypted',
+        secondaryLabel: '📄 Plain JSON',
+        cancelLabel: 'Cancel'
+      });
+
+      if (promptRes.choice === 'cancel') return;
+      if (promptRes.choice === 'primary' && !promptRes.password) {
+        showStatus('Please type a password to encrypt, or click "Plain JSON".', 'warn');
+        return;
+      }
+
+      const passphrase = promptRes.choice === 'primary' ? promptRes.password : '';
+      const jsonText = await window.TJFStorage.exportBackupJson(passphrase);
       const blob = new Blob([jsonText], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      const dateStr = new Date().toISOString().slice(0, 10);
+      const dateStr = window.TJFStorage.formatLocalDateIso();
+      const suffix = passphrase ? '-encrypted' : '';
 
       const link = document.createElement('a');
       link.href = url;
-      link.download = `teletalk-jobs-filler-backup-${dateStr}.json`;
+      link.download = `teletalk-jobs-filler-backup-${dateStr}${suffix}.json`;
       document.body.appendChild(link);
       link.click();
       link.remove();
 
       setTimeout(() => URL.revokeObjectURL(url), 1500);
-      showStatus('Backup JSON downloaded! Keep it safe to transfer across devices.', 'success');
+      showStatus(
+        passphrase
+          ? 'Encrypted backup JSON downloaded! Remember your password to restore.'
+          : 'Backup JSON downloaded! Keep this file private & secure.',
+        'success'
+      );
     } catch (err) {
       showStatus(`Export failed: ${err.message}`, 'error');
     }
@@ -249,18 +407,65 @@
   async function processImportedFile(file) {
     if (!file) return;
     hideStatus();
+    if (file.size > window.TJFStorage.MAX_BACKUP_BYTES) {
+      showStatus('Backup file is too large (max 2 MB allowed).', 'error');
+      return;
+    }
+
     try {
       const text = await file.text();
-      const result = await window.TJFStorage.importBackupJson(text, 'replace');
+      const isEncrypted = window.TJFStorage.isEncryptedBackupJson(text);
+      const latestState = await window.TJFStorage.getState();
+      const hasExisting = latestState.profiles.some((p) => window.TJFStorage.hasMeaningfulData(p.data));
+
+      let mode = 'replace';
+      let passphrase = '';
+
+      if (isEncrypted || hasExisting) {
+        const promptRes = await openActionPrompt({
+          title: isEncrypted ? '🔒 Encrypted Backup Detected' : '📥 Confirm Backup Restore',
+          desc: hasExisting
+            ? 'You already have saved profiles. Choose "Merge" to keep them or "Replace All" to overwrite.'
+            : 'Enter the password used when exporting this encrypted backup.',
+          showPassword: isEncrypted,
+          passwordPlaceholder: 'Decryption password...',
+          primaryLabel: hasExisting ? 'Merge (Keep)' : '🔓 Import',
+          secondaryLabel: hasExisting ? 'Replace All' : '',
+          cancelLabel: 'Cancel'
+        });
+
+        if (promptRes.choice === 'cancel') return;
+        mode = hasExisting && promptRes.choice === 'primary' ? 'append' : 'replace';
+        passphrase = promptRes.password;
+      }
+
+      const result = await window.TJFStorage.importBackupJson(text, mode, passphrase);
       renderProfileList(result.state);
       els.importDrawer.classList.add('hidden');
-      showStatus(`Successfully restored ${result.importedCount} profile(s) from backup!`, 'success');
+      showStatus(
+        mode === 'append'
+          ? `Merged ${result.importedCount} profile(s) into your existing profiles!`
+          : `Successfully restored ${result.importedCount} profile(s) from backup!`,
+        'success'
+      );
     } catch (err) {
       showStatus(err.message || 'Failed to import backup file.', 'error');
     }
   }
 
   function wireEvents() {
+    els.btnPromptPrimary.addEventListener('click', () => closeActionPrompt('primary'));
+    els.btnPromptSecondary.addEventListener('click', () => closeActionPrompt('secondary'));
+    els.btnPromptCancel.addEventListener('click', () => closeActionPrompt('cancel'));
+    els.promptInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        closeActionPrompt('primary');
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeActionPrompt('cancel');
+      }
+    });
     els.profileSwitcher.addEventListener('change', async () => {
       hideStatus();
       try {

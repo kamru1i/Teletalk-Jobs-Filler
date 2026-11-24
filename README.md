@@ -13,8 +13,8 @@
 - **Old & New Teletalk Portal Compatible:** পুরাতন PHP টেমপ্লেট ও নতুন Alljobs/DGBPO টেমপ্লেট — উভয়ের ফিল্ড ID/Name এবং বাংলা/ইংরেজি লেবেল দেখে স্বয়ংক্রিয়ভাবে ম্যাচ করে (যেমন `Chattogram` / `Chittagong`, `Cumilla` / `Comilla`, `GPA(out of 5)` ইত্যাদি)।
 - **Teletalk-Style Application Form UI:** ড্যাশবোর্ডটি আসল Teletalk সরকারি চাকরির আবেদন ফরমের ডিজাইন অনুযায়ী সাজানো (সবুজ ব্যানার, `Same as Present Address` / `If Applicable` টগল ও পূরণকৃত ঘরে সবুজ বর্ডার), যাতে ব্যবহারকারীরা কোনো জটিলতা ছাড়াই পরিচিত লেআউটে তথ্য সেভ করতে পারেন।
 - **Job Experiences & Computer Proficiency:** প্রয়োজনে একাধিক **Job Experiences** (`⊕ ADD MORE` সহ, অটোমেটিক `+ ADD MORE` ক্লিক, `Currently Working`, ও ৩০০ অক্ষরের `Job Description`) এবং **Other Qualifications / Experiences** (*1) Do you have Proficiency in Operating a Computer, along with working in a Relevant field? — Yes*) একসাথে সেভ ও অটো-ফিল করে।
-- **Visual Review Highlights:** সঠিকভাবে পূরণ হওয়া ঘরগুলো **সবুজ (Green)** রঙে এবং ক্যাপচা বা কোনো ঘর বাদ পড়লে তা **হলুদ (Yellow)** রঙে হাইলাইট হয় যেন সাবমিটের আগে সহজেই চোখে পড়ে।
-- **100% Private + JSON Backup:** সমস্ত ডাটা আপনার ব্রাউজারের `chrome.storage.local`-এ থাকে। যেকোনো সময় **Export Backup (JSON)** করে পেনড্রাইভ/ইমেইলে রাখতে এবং অন্য কম্পিউটারে **Import Backup** করতে পারবেন।
+- **Visual Review Highlights:** সঠিকভাবে পূরণ হওয়া ঘরগুলো **সবুজ (Green)** রঙে এবং কোনো বাধ্যতামূলক ফর্ম ফিল্ড বাদ পড়লে তা **হলুদ (Yellow)** রঙে হাইলাইট হয় (`Verification Code / Captcha` আলাদাভাবে বাদ রাখা হয় যেন শুধু আসল বাকি তথ্যই চোখে পড়ে)।
+- **100% Private + Encrypted JSON Backup (AES-256-GCM):** সমস্ত ডাটা আপনার ব্রাউজারের `chrome.storage.local`-এ থাকে। **Export Backup (JSON)** করার সময় চাইলে পাসওয়ার্ড দিয়ে **AES-256-GCM এনক্রিপ্টেড** অথবা প্লেইন JSON হিসেবে রাখতে এবং অন্য কম্পিউটারে **Import Backup** (`Merge` বা `Replace All`) করতে পারবেন। এছাড়া নন-Teletalk সাইট বা অসুরক্ষিত HTTP পেজ সম্পর্কে বাড়তি সেফটি সতর্কতা দেখায়।
 
 ---
 
@@ -81,12 +81,12 @@
 2. Click the **Teletalk Jobs Filler** icon, verify the selected profile in the dropdown, and click **⚡ Auto Fill Current Form**.
 3. Wait 1–3 seconds while the smart engine sequentially fills basic fields, triggers cascading District -> Upazila & Exam -> Subject dropdowns, reveals hidden NID/GPA inputs, clicks `+ ADD MORE` for multiple saved job experiences, fills Other Qualifications/Experiences, and highlights fields:
    - **Soft Green Border:** Successfully autofilled.
-   - **Soft Yellow Border:** Needs attention (e.g., Verification Captcha, post-specific questions, or missing profile info).
+   - **Soft Yellow Border:** Needs attention (missing required form info or unmatched option — *Verification Code / Captcha* is intentionally excluded from yellow warnings & counts).
 4. Carefully review all entries, enter the **Captcha**, check the declaration box, and submit.
 
 ### Step 4: Backup & Transfer Across Devices
-- Click **📤 Export Backup (JSON)** in the Popup or Dashboard to save a `.json` backup file containing all profiles.
-- Click **📥 Import Backup** on another device (drag & drop the `.json` file into the popup dropzone, or click **Choose .json File** to select it in the dashboard) to restore all profiles instantly.
+- Click **📤 Export Backup (JSON)** in the Popup or Dashboard — optionally protect sensitive NID/Passport data with a password (**AES-256-GCM encryption**) or export plain JSON.
+- Click **📥 Import Backup** on another device (drag & drop the `.json` file into the popup dropzone, or click **Choose .json File** in the dashboard), enter the password if encrypted, and choose **Merge (Keep Existing)** or **Replace All**.
 
 ---
 

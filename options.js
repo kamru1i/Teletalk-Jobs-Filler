@@ -72,6 +72,7 @@
     modalDesc: document.getElementById('modalDesc'),
     modalInput: document.getElementById('modalInput'),
     btnModalCancel: document.getElementById('btnModalCancel'),
+    btnModalSecondary: document.getElementById('btnModalSecondary'),
     btnModalConfirm: document.getElementById('btnModalConfirm'),
     dob: document.getElementById('dob'),
     dobPreview: document.getElementById('dobPreview'),
@@ -96,8 +97,17 @@
   let isDirty = false;
   let toastTimer = null;
   let autoSaveTimer = null;
+  let activeSaveEpoch = 0;
   let modalResolve = null;
   let lastAutoMobile = '';
+
+  function cancelPendingAutoSave() {
+    activeSaveEpoch++;
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = null;
+    }
+  }
 
   function isGpaResultType(val) {
     return typeof val === 'string' && /gpa/i.test(val);
@@ -119,13 +129,13 @@
 
   function populateSelectElement(sel, items, selectedValue = '', placeholder = 'Select') {
     if (!sel) return;
-    sel.innerHTML = '';
+    const frag = document.createDocumentFragment();
 
     if (placeholder !== null) {
       const opt = document.createElement('option');
       opt.value = '';
       opt.textContent = placeholder;
-      sel.appendChild(opt);
+      frag.appendChild(opt);
     }
 
     const list = Array.isArray(items) ? items : [];
@@ -138,8 +148,10 @@
         opt.value = item;
         opt.textContent = item;
       }
-      sel.appendChild(opt);
+      frag.appendChild(opt);
     }
+
+    sel.replaceChildren(frag);
 
     if (selectedValue) {
       const exists = Array.from(sel.options).some((o) => o.value === selectedValue);
@@ -147,6 +159,7 @@
         const customOpt = document.createElement('option');
         customOpt.value = selectedValue;
         customOpt.textContent = selectedValue;
+        customOpt.dataset.tjfCustom = '1';
         sel.appendChild(customOpt);
       }
       sel.value = selectedValue;
@@ -211,13 +224,18 @@
     );
   }
 
+  function syncSingleControlStyle(el) {
+    if (!el || !el.classList || !el.classList.contains('form-control')) return;
+    const rawVal = String(el.value || '').trim();
+    const isPlaceholderChoice = el.id === 'other_computer_proficiency' && rawVal === 'Skip';
+    const hasVal = !el.disabled && rawVal !== '' && !isPlaceholderChoice;
+    el.classList.toggle('has-val', hasVal);
+  }
+
   function syncFilledControlStyles() {
     if (!els.profileForm) return;
     for (const el of els.profileForm.querySelectorAll('.form-control')) {
-      const rawVal = String(el.value || '').trim();
-      const isPlaceholderChoice = el.id === 'other_computer_proficiency' && rawVal === 'Skip';
-      const hasVal = !el.disabled && rawVal !== '' && !isPlaceholderChoice;
-      el.classList.toggle('has-val', hasVal);
+      syncSingleControlStyle(el);
     }
   }
 
@@ -234,6 +252,9 @@
     const label = document.createElement('label');
     label.className = 'tt-label';
     label.textContent = labelText;
+    if (controlEl && controlEl.id) {
+      label.htmlFor = controlEl.id;
+    }
     const col = document.createElement('div');
     col.className = 'tt-control-col';
     col.appendChild(controlEl);
@@ -300,6 +321,7 @@
     leftCol.className = 'tt-compact-rows';
 
     const empSelect = document.createElement('select');
+    empSelect.id = `job_${index}_employment_type`;
     empSelect.className = 'form-control';
     empSelect.dataset.jobField = 'employment_type';
     populateSelectElement(empSelect, TD.EMPLOYMENT_TYPES, norm.employment_type, 'Select');
@@ -307,6 +329,7 @@
 
     const desInput = document.createElement('input');
     desInput.type = 'text';
+    desInput.id = `job_${index}_designation`;
     desInput.className = 'form-control';
     desInput.maxLength = 50;
     desInput.placeholder = 'e.g. IT Officer / Assistant Manager';
@@ -327,9 +350,11 @@
 
     const startInput = document.createElement('input');
     startInput.type = 'date';
+    startInput.id = `job_${index}_job_start_date`;
     startInput.className = 'form-control tt-date-input';
     startInput.dataset.jobField = 'job_start_date';
     startInput.value = norm.job_start_date;
+    serviceLabel.htmlFor = startInput.id;
 
     const toSpan = document.createElement('span');
     toSpan.className = 'tt-date-to';
@@ -340,6 +365,7 @@
 
     const endInput = document.createElement('input');
     endInput.type = 'date';
+    endInput.id = `job_${index}_job_end_date`;
     endInput.className = 'form-control tt-date-input';
     endInput.dataset.jobField = 'job_end_date';
     endInput.value = norm.job_end_date;
@@ -348,9 +374,11 @@
     cwLabel.className = 'tt-curr-work';
     const cwCheck = document.createElement('input');
     cwCheck.type = 'checkbox';
+    cwCheck.id = `job_${index}_currently_working`;
     cwCheck.dataset.jobField = 'currently_working';
     cwCheck.checked = norm.currently_working;
     cwCheck.addEventListener('change', refreshConditionalVisibility);
+    cwLabel.htmlFor = cwCheck.id;
     const cwText = document.createElement('span');
     cwText.textContent = 'CurrentlyWorking';
     cwLabel.appendChild(cwCheck);
@@ -373,6 +401,7 @@
 
     const orgInput = document.createElement('input');
     orgInput.type = 'text';
+    orgInput.id = `job_${index}_organization`;
     orgInput.className = 'form-control';
     orgInput.maxLength = 100;
     orgInput.placeholder = 'Company / Organization Name';
@@ -382,6 +411,7 @@
 
     const addrInput = document.createElement('input');
     addrInput.type = 'text';
+    addrInput.id = `job_${index}_office_address`;
     addrInput.className = 'form-control';
     addrInput.maxLength = 100;
     addrInput.placeholder = 'Office Street, Road, Area, District';
@@ -391,6 +421,7 @@
 
     const salaryInput = document.createElement('input');
     salaryInput.type = 'text';
+    salaryInput.id = `job_${index}_last_salary`;
     salaryInput.className = 'form-control';
     salaryInput.maxLength = 30;
     salaryInput.placeholder = 'Optional';
@@ -406,21 +437,23 @@
     const descRow = document.createElement('div');
     descRow.className = 'tt-desc-row';
 
-    const descLabel = document.createElement('label');
-    descLabel.className = 'tt-label';
-    descLabel.textContent = 'Job Description';
-    descRow.appendChild(descLabel);
-
-    const descField = document.createElement('div');
-    descField.className = 'tt-control-col tt-desc-field';
-
     const descTextarea = document.createElement('textarea');
+    descTextarea.id = `job_${index}_job_description`;
     descTextarea.className = 'form-control';
     descTextarea.rows = 3;
     descTextarea.maxLength = 300;
     descTextarea.placeholder = 'Short summary of duties and responsibilities (max 300 characters)';
     descTextarea.dataset.jobField = 'job_description';
     descTextarea.value = norm.job_description;
+
+    const descLabel = document.createElement('label');
+    descLabel.className = 'tt-label';
+    descLabel.textContent = 'Job Description';
+    descLabel.htmlFor = descTextarea.id;
+    descRow.appendChild(descLabel);
+
+    const descField = document.createElement('div');
+    descField.className = 'tt-control-col tt-desc-field';
     descField.appendChild(descTextarea);
 
     const counter = document.createElement('span');
@@ -441,10 +474,11 @@
       ? jobs.map(Storage.normalizeJobExperienceItem)
       : [{ ...Storage.DEFAULT_JOB_EXPERIENCE_ITEM }];
 
-    els.jobExpList.innerHTML = '';
+    const frag = document.createDocumentFragment();
     list.forEach((job, idx) => {
-      els.jobExpList.appendChild(createJobExperienceCard(job, idx, list.length));
+      frag.appendChild(createJobExperienceCard(job, idx, list.length));
     });
+    els.jobExpList.replaceChildren(frag);
   }
 
   function updateUpazilaDropdown(districtSelectId, upazilaSelectId, selectedUpazila = '') {
@@ -569,14 +603,15 @@
   }
 
   function renderProfileSelect(state) {
-    els.profileSelect.innerHTML = '';
+    const frag = document.createDocumentFragment();
     for (const p of state.profiles) {
       const opt = document.createElement('option');
       opt.value = p.id;
       opt.textContent = p.profileName;
       if (p.id === state.activeProfileId) opt.selected = true;
-      els.profileSelect.appendChild(opt);
+      frag.appendChild(opt);
     }
+    els.profileSelect.replaceChildren(frag);
 
     const active = state.profiles.find((p) => p.id === state.activeProfileId) || state.profiles[0];
     updateProfileStatsText(active.data);
@@ -590,6 +625,13 @@
 
   function populateFormFromProfile(profile) {
     const data = Storage.normalizeProfileData(profile.data);
+
+    // Purge any custom options injected for previously viewed profiles
+    if (els.profileForm) {
+      for (const customOpt of els.profileForm.querySelectorAll('select option[data-tjf-custom="1"]')) {
+        customOpt.remove();
+      }
+    }
 
     // Populate Districts first so Upazilas exist before assigning value
     document.getElementById('present_district').value = data.present_district || '';
@@ -618,6 +660,7 @@
           const opt = document.createElement('option');
           opt.value = val;
           opt.textContent = val;
+          opt.dataset.tjfCustom = '1';
           el.appendChild(opt);
         }
         el.value = val;
@@ -678,9 +721,11 @@
     const active = currentState.profiles.find((p) => p.id === currentState.activeProfileId) || currentState.profiles[0];
     if (!active) return;
 
+    const epoch = activeSaveEpoch;
     const data = collectFormData();
     try {
       const res = await Storage.updateProfile(active.id, active.profileName, data);
+      if (epoch !== activeSaveEpoch) return;
       currentState = res.state;
       updateProfileStatsText(res.profile.data);
       setDirty(false);
@@ -698,72 +743,120 @@
   }
 
   async function saveCurrentProfile() {
-    if (autoSaveTimer) {
-      clearTimeout(autoSaveTimer);
-      autoSaveTimer = null;
-    }
+    cancelPendingAutoSave();
     if (!currentState) return;
     const active = currentState.profiles.find((p) => p.id === currentState.activeProfileId) || currentState.profiles[0];
+    if (!active) return;
     const data = collectFormData();
 
-    if (data.mobile && data.confirm_mobile && data.mobile !== data.confirm_mobile) {
-      showToast('Saved, but note: Mobile Number and Confirm Mobile Number do not match!', 'warn');
-    } else {
-      showToast(`Profile "${active.profileName}" saved successfully!`, 'success');
-    }
+    try {
+      const res = await Storage.updateProfile(active.id, active.profileName, data);
+      currentState = res.state;
+      populateFormFromProfile(res.profile);
+      renderProfileSelect(currentState);
+      setDirty(false);
 
-    const res = await Storage.updateProfile(active.id, active.profileName, data);
-    currentState = res.state;
-    populateFormFromProfile(res.profile);
-    renderProfileSelect(currentState);
-    setDirty(false);
+      if (data.mobile && data.confirm_mobile && data.mobile !== data.confirm_mobile) {
+        showToast('Saved, but note: Mobile Number and Confirm Mobile Number do not match!', 'warn');
+      } else {
+        showToast(`Profile "${res.profile.profileName}" saved successfully!`, 'success');
+      }
+    } catch (err) {
+      showToast(`Failed to save profile: ${err.message || 'Storage error'}`, 'error');
+    }
   }
 
-  function askModal({ title, desc, defaultValue = '', confirmLabel = 'Confirm' }) {
+  function askModal({
+    title,
+    desc,
+    defaultValue = '',
+    confirmLabel = 'Confirm',
+    secondaryLabel = '',
+    showInput = true,
+    inputType = 'text',
+    placeholder = 'Profile name...'
+  }) {
+    if (modalResolve) {
+      closeModal({ action: 'cancel', value: '' });
+    }
     return new Promise((resolve) => {
       modalResolve = resolve;
       els.modalTitle.textContent = title;
       els.modalDesc.textContent = desc;
+      els.modalInput.type = inputType;
+      els.modalInput.placeholder = placeholder;
       els.modalInput.value = defaultValue;
+      els.modalInput.classList.toggle('hidden', !showInput);
       els.btnModalConfirm.textContent = confirmLabel;
+
+      if (secondaryLabel) {
+        els.btnModalSecondary.textContent = secondaryLabel;
+        els.btnModalSecondary.classList.remove('hidden');
+      } else {
+        els.btnModalSecondary.classList.add('hidden');
+      }
+
       els.modalBackdrop.classList.remove('hidden');
-      els.modalInput.focus();
-      els.modalInput.select();
+      if (showInput) {
+        els.modalInput.focus();
+        if (inputType !== 'password') {
+          els.modalInput.select();
+        }
+      } else {
+        els.btnModalConfirm.focus();
+      }
     });
   }
 
-  function closeModal(result) {
+  function closeModal(action = 'cancel') {
+    const val = els.modalInput.value;
+    els.modalInput.value = '';
+    els.modalInput.type = 'text';
+    els.modalInput.classList.remove('hidden');
+    els.btnModalSecondary.classList.add('hidden');
     els.modalBackdrop.classList.add('hidden');
     if (modalResolve) {
       const fn = modalResolve;
       modalResolve = null;
-      fn(result);
+      fn(
+        action === 'cancel'
+          ? { action: 'cancel', value: '' }
+          : { action, value: val }
+      );
     }
   }
 
   async function handleNewProfile() {
-    const name = await askModal({
+    cancelPendingAutoSave();
+    const resModal = await askModal({
       title: 'Create New Applicant Profile',
       desc: 'Give this profile a clear name (e.g., "Friend 1", "Sister", or "Govt Job 2").',
       defaultValue: `Profile ${currentState.profiles.length + 1}`,
       confirmLabel: 'Create Profile'
     });
+    const name = resModal.action === 'confirm' ? resModal.value.trim() : '';
     if (!name) return;
-    const res = await Storage.createProfile(name);
-    currentState = res.state;
-    renderProfileSelect(currentState);
-    populateFormFromProfile(res.profile);
-    showToast(`Created new profile "${res.profile.profileName}".`, 'success');
+    try {
+      const res = await Storage.createProfile(name);
+      currentState = res.state;
+      renderProfileSelect(currentState);
+      populateFormFromProfile(res.profile);
+      showToast(`Created new profile "${res.profile.profileName}".`, 'success');
+    } catch (err) {
+      showToast(err.message || 'Could not create profile.', 'error');
+    }
   }
 
   async function handleRenameProfile() {
+    cancelPendingAutoSave();
     const active = currentState.profiles.find((p) => p.id === currentState.activeProfileId) || currentState.profiles[0];
-    const nextName = await askModal({
+    const resModal = await askModal({
       title: 'Rename Profile',
       desc: `Enter a new name for "${active.profileName}".`,
       defaultValue: active.profileName,
       confirmLabel: 'Rename'
     });
+    const nextName = resModal.action === 'confirm' ? resModal.value.trim() : '';
     if (!nextName || nextName === active.profileName) return;
 
     const currentData = collectFormData();
@@ -774,23 +867,30 @@
   }
 
   async function handleDuplicateProfile() {
+    cancelPendingAutoSave();
     const active = currentState.profiles.find((p) => p.id === currentState.activeProfileId) || currentState.profiles[0];
-    const nextName = await askModal({
+    const resModal = await askModal({
       title: 'Duplicate Profile',
       desc: `Create a copy of "${active.profileName}" with all its saved fields.`,
       defaultValue: `${active.profileName} (Copy)`,
       confirmLabel: 'Duplicate'
     });
+    const nextName = resModal.action === 'confirm' ? resModal.value.trim() : '';
     if (!nextName) return;
 
-    const res = await Storage.createProfile(nextName, collectFormData());
-    currentState = res.state;
-    renderProfileSelect(currentState);
-    populateFormFromProfile(res.profile);
-    showToast(`Duplicated as "${res.profile.profileName}".`, 'success');
+    try {
+      const res = await Storage.createProfile(nextName, collectFormData());
+      currentState = res.state;
+      renderProfileSelect(currentState);
+      populateFormFromProfile(res.profile);
+      showToast(`Duplicated as "${res.profile.profileName}".`, 'success');
+    } catch (err) {
+      showToast(err.message || 'Could not duplicate profile.', 'error');
+    }
   }
 
   async function handleDeleteProfile() {
+    cancelPendingAutoSave();
     const active = currentState.profiles.find((p) => p.id === currentState.activeProfileId) || currentState.profiles[0];
     const isLast = currentState.profiles.length <= 1;
     const msg = isLast
@@ -807,42 +907,103 @@
   }
 
   async function handleExport() {
+    cancelPendingAutoSave();
     if (isDirty) {
       await saveCurrentProfile();
     }
-    const json = await Storage.exportBackupJson();
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const dateStr = new Date().toISOString().slice(0, 10);
 
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `teletalk-jobs-filler-backup-${dateStr}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1500);
-    showToast('JSON backup exported! Store this file safely.', 'success');
+    const modalRes = await askModal({
+      title: '📤 Export Backup (JSON)',
+      desc: 'Enter an optional password to AES-256 encrypt your sensitive NID/Passport data, or export plain JSON.',
+      defaultValue: '',
+      confirmLabel: '🔒 Export Encrypted',
+      secondaryLabel: '📄 Export Plain JSON',
+      showInput: true,
+      inputType: 'password',
+      placeholder: 'Encryption password...'
+    });
+    if (modalRes.action === 'cancel') return;
+
+    if (modalRes.action === 'confirm' && !modalRes.value) {
+      showToast('Enter a password to encrypt, or click "Export Plain JSON".', 'warn');
+      return;
+    }
+
+    const passphrase = modalRes.action === 'confirm' ? modalRes.value : '';
+    try {
+      const json = await Storage.exportBackupJson(passphrase);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const dateStr = Storage.formatLocalDateIso();
+      const suffix = passphrase ? '-encrypted' : '';
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `teletalk-jobs-filler-backup-${dateStr}${suffix}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      showToast(
+        passphrase
+          ? 'Encrypted JSON backup exported! Keep your password safe.'
+          : 'JSON backup exported! Store this file privately.',
+        'success'
+      );
+    } catch (err) {
+      showToast(err.message || 'Export failed.', 'error');
+    }
   }
 
   async function handleImportFile(file) {
     if (!file) return;
+    cancelPendingAutoSave();
+    if (file.size > Storage.MAX_BACKUP_BYTES) {
+      showToast('Backup file is too large (max 2 MB allowed).', 'error');
+      els.fileImport.value = '';
+      return;
+    }
+
     try {
       const text = await file.text();
-      const hasExisting = currentState && currentState.profiles.some((p) => Storage.hasMeaningfulData(p.data));
-      if (hasExisting) {
-        const confirmed = window.confirm(
-          'Importing a full backup will replace your current saved profiles on this browser.\n\nClick OK to restore from the backup file, or Cancel to keep existing profiles.'
-        );
-        if (!confirmed) return;
+      const isEncrypted = Storage.isEncryptedBackupJson(text);
+      const latestState = await Storage.getState();
+      const hasExisting = latestState.profiles.some((p) => Storage.hasMeaningfulData(p.data));
+
+      let mode = 'replace';
+      let passphrase = '';
+
+      if (isEncrypted || hasExisting) {
+        const modalRes = await askModal({
+          title: isEncrypted ? '🔒 Encrypted Backup Detected' : '📥 Restore Profiles from Backup',
+          desc: hasExisting
+            ? 'You already have saved profiles. Choose "Merge (Keep Existing)" or "Replace All".'
+            : 'Enter the password used when exporting this encrypted backup.',
+          defaultValue: '',
+          confirmLabel: hasExisting ? 'Merge (Keep Existing)' : '🔓 Decrypt & Import',
+          secondaryLabel: hasExisting ? 'Replace All' : '',
+          showInput: isEncrypted,
+          inputType: 'password',
+          placeholder: 'Decryption password...'
+        });
+
+        if (modalRes.action === 'cancel') return;
+        mode = hasExisting && modalRes.action === 'confirm' ? 'append' : 'replace';
+        passphrase = modalRes.value;
       }
-      const res = await Storage.importBackupJson(text, 'replace');
+
+      const res = await Storage.importBackupJson(text, mode, passphrase);
       currentState = res.state;
       const active = currentState.profiles.find((p) => p.id === currentState.activeProfileId) || currentState.profiles[0];
       renderProfileSelect(currentState);
       populateFormFromProfile(active);
       els.importBanner.classList.add('hidden');
-      showToast(`Imported ${res.importedCount} profile(s) from backup!`, 'success');
+      showToast(
+        mode === 'append'
+          ? `Merged ${res.importedCount} profile(s) into your existing profiles!`
+          : `Imported ${res.importedCount} profile(s) from backup!`,
+        'success'
+      );
     } catch (err) {
       showToast(err.message || 'Invalid backup JSON file.', 'error');
     } finally {
@@ -868,6 +1029,7 @@
 
     // Profile switching
     els.profileSelect.addEventListener('change', async () => {
+      cancelPendingAutoSave();
       if (isDirty) {
         const active = currentState.profiles.find((p) => p.id === currentState.activeProfileId);
         if (active) {
@@ -921,22 +1083,19 @@
     });
 
     // Modal handlers
-    els.btnModalCancel.addEventListener('click', () => closeModal(null));
-    els.btnModalConfirm.addEventListener('click', () => {
-      const val = els.modalInput.value.trim();
-      closeModal(val || null);
-    });
+    els.btnModalCancel.addEventListener('click', () => closeModal('cancel'));
+    els.btnModalSecondary.addEventListener('click', () => closeModal('secondary'));
+    els.btnModalConfirm.addEventListener('click', () => closeModal('confirm'));
     els.modalInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        const val = els.modalInput.value.trim();
-        closeModal(val || null);
+        closeModal('confirm');
       } else if (e.key === 'Escape') {
-        closeModal(null);
+        closeModal('cancel');
       }
     });
     els.modalBackdrop.addEventListener('click', (e) => {
-      if (e.target === els.modalBackdrop) closeModal(null);
+      if (e.target === els.modalBackdrop) closeModal('cancel');
     });
 
     // Dynamic field behaviors
@@ -1000,14 +1159,14 @@
       }
     }
 
-    // Track dirty state, live valid border styling, and debounced auto-save on any form edit
-    els.profileForm.addEventListener('input', () => {
-      syncFilledControlStyles();
+    // Track dirty state, O(1) control border styling, and debounced auto-save on any form edit
+    els.profileForm.addEventListener('input', (e) => {
+      syncSingleControlStyle(e.target);
       setDirty(true);
       scheduleAutoSave();
     });
-    els.profileForm.addEventListener('change', () => {
-      syncFilledControlStyles();
+    els.profileForm.addEventListener('change', (e) => {
+      syncSingleControlStyle(e.target);
       setDirty(true);
       scheduleAutoSave();
     });

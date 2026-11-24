@@ -74,10 +74,23 @@ body {
   color: #e6f4ea;
 }
 
-.popup-header .site-badge {
+.popup-header .site-badge.badge-neutral {
   background: rgba(255, 255, 255, 0.92);
-  color: #1e293b;
+  color: #334155;
   border-color: rgba(255, 255, 255, 0.95);
+}
+
+.popup-header .site-badge.badge-teletalk {
+  background: #dcfce7;
+  color: #14532d;
+  border-color: #86efac;
+}
+
+.popup-header .site-badge.badge-http,
+.popup-header .site-badge.badge-warn {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fcd34d;
 }
 
 .brand {
@@ -128,7 +141,8 @@ body {
   border: 1px solid var(--slate-200);
 }
 
-.badge-warn {
+.badge-warn,
+.badge-http {
   background: var(--amber-50);
   color: var(--amber-800);
   border: 1px solid var(--amber-200);
@@ -256,6 +270,61 @@ body {
   background: var(--red-50);
   border: 1px solid var(--red-200);
   color: var(--red-700);
+}
+
+/* Inline Security / Password Prompt */
+.action-prompt {
+  background: #ffffff;
+  border: 1.5px solid var(--amber-200);
+  border-radius: var(--radius);
+  padding: 10px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+.action-prompt.hidden,
+.prompt-input.hidden,
+.btn.hidden {
+  display: none;
+}
+
+.prompt-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--slate-800);
+}
+
+.prompt-desc {
+  font-size: 11.5px;
+  color: var(--slate-600);
+  line-height: 1.4;
+}
+
+.prompt-input {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1.5px solid var(--slate-300);
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--slate-800);
+}
+
+.prompt-input:focus {
+  outline: none;
+  border-color: var(--emerald-600);
+}
+
+.prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.prompt-actions .btn {
+  width: auto;
+  flex: 1 1 auto;
 }
 
 /* Buttons */

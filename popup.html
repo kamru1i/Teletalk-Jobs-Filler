@@ -37,6 +37,18 @@
     <!-- Status Banner -->
     <div id="statusBanner" class="status-banner hidden" role="status" aria-live="polite"></div>
 
+    <!-- Inline Security / Confirmation / Password Prompt -->
+    <div id="actionPrompt" class="action-prompt hidden" role="dialog" aria-labelledby="promptTitle">
+      <div id="promptTitle" class="prompt-title"></div>
+      <p id="promptDesc" class="prompt-desc"></p>
+      <input type="password" id="promptInput" class="prompt-input hidden" autocomplete="off" placeholder="Optional password...">
+      <div class="prompt-actions">
+        <button type="button" id="btnPromptPrimary" class="btn btn-small btn-primary">Confirm</button>
+        <button type="button" id="btnPromptSecondary" class="btn btn-small btn-secondary hidden">Option</button>
+        <button type="button" id="btnPromptCancel" class="btn btn-small btn-ghost">Cancel</button>
+      </div>
+    </div>
+
     <!-- Primary Actions -->
     <section class="actions-stack">
       <button type="button" id="btnAutofill" class="btn btn-primary">
@@ -77,11 +89,10 @@
     <!-- Footer Hint -->
     <footer class="popup-footer">
       <span>100% local &amp; private • Stored on your device</span>
-      <span class="version-tag">v1.1.2</span>
+      <span class="version-tag">v1.2.0</span>
     </footer>
   </div>
 
-  <script src="teletalk-data.js"></script>
   <script src="storage.js"></script>
   <script src="popup.js"></script>
 </body>

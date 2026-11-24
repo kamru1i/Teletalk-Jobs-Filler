@@ -2,8 +2,12 @@
   "manifest_version": 3,
   "name": "Teletalk Jobs Filler",
   "short_name": "Teletalk Filler",
-  "version": "1.1.2",
+  "version": "1.2.0",
+  "minimum_chrome_version": "116",
   "description": "Smartly autofills Bangladesh Government Job application forms on *.teletalk.com.bd with multi-profile support and JSON backup.",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; base-uri 'none'; form-action 'none';"
+  },
   "permissions": [
     "storage",
     "activeTab",
@@ -31,16 +35,5 @@
   "options_ui": {
     "page": "options.html",
     "open_in_tab": true
-  },
-  "content_scripts": [
-    {
-      "matches": [
-        "*://*.teletalk.com.bd/*"
-      ],
-      "js": [
-        "filler.js"
-      ],
-      "run_at": "document_idle"
-    }
-  ]
+  }
 }

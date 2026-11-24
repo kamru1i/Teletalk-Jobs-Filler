@@ -63,6 +63,7 @@
       <input type="text" id="modalInput" class="form-control" maxlength="40" placeholder="Profile name...">
       <div class="modal-actions">
         <button type="button" id="btnModalCancel" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="btnModalSecondary" class="btn btn-secondary hidden">Option</button>
         <button type="button" id="btnModalConfirm" class="btn btn-primary">Confirm</button>
       </div>
     </div>
@@ -98,7 +99,7 @@
               <div class="tt-form-row">
                 <label for="name" class="tt-label">Applicant's Name</label>
                 <div class="tt-control-col">
-                  <input type="text" id="name" class="form-control uppercase-input" maxlength="50" placeholder="e.g. MD. KAMRUL ISLAM">
+                  <input type="text" id="name" class="form-control uppercase-input" maxlength="50" placeholder="e.g. MD. RAHIM UDDIN">
                 </div>
               </div>
 
@@ -112,7 +113,7 @@
               <div class="tt-form-row">
                 <label for="father" class="tt-label">Father's Name</label>
                 <div class="tt-control-col">
-                  <input type="text" id="father" class="form-control uppercase-input" maxlength="50" placeholder="e.g. MD. ABDUL KARIM">
+                  <input type="text" id="father" class="form-control uppercase-input" maxlength="50" placeholder="e.g. MD. KARIM UDDIN">
                 </div>
               </div>
 
@@ -126,7 +127,7 @@
               <div class="tt-form-row">
                 <label for="mother" class="tt-label">Mother's Name</label>
                 <div class="tt-control-col">
-                  <input type="text" id="mother" class="form-control uppercase-input" maxlength="50" placeholder="e.g. MST. AMENA BEGUM">
+                  <input type="text" id="mother" class="form-control uppercase-input" maxlength="50" placeholder="e.g. MST. SALMA BEGUM">
                 </div>
               </div>
 
@@ -173,7 +174,7 @@
                 <div class="tt-control-col">
                   <div class="tt-inline-split">
                     <select id="nid_has" class="form-control tt-short-select"></select>
-                    <div class="tt-conditional-inline conditional-wrap hidden" id="wrap_nid_no">
+                    <div class="tt-conditional-inline hidden" id="wrap_nid_no">
                       <label for="nid_no" class="tt-bracket-label">[National ID Number]</label>
                       <input type="text" id="nid_no" inputmode="numeric" class="form-control" maxlength="20" placeholder="10, 13, or 17 digit NID">
                     </div>
@@ -186,7 +187,7 @@
                 <div class="tt-control-col">
                   <div class="tt-inline-split">
                     <select id="breg_has" class="form-control tt-short-select"></select>
-                    <div class="tt-conditional-inline conditional-wrap hidden" id="wrap_breg_no">
+                    <div class="tt-conditional-inline hidden" id="wrap_breg_no">
                       <label for="breg_no" class="tt-bracket-label">[Birth Registration Number]</label>
                       <input type="text" id="breg_no" inputmode="numeric" class="form-control" maxlength="25" placeholder="17 digit BREG No">
                     </div>
@@ -199,7 +200,7 @@
                 <div class="tt-control-col">
                   <div class="tt-inline-split">
                     <select id="passport_has" class="form-control tt-short-select"></select>
-                    <div class="tt-conditional-inline conditional-wrap hidden" id="wrap_passport_no">
+                    <div class="tt-conditional-inline hidden" id="wrap_passport_no">
                       <label for="passport_no" class="tt-bracket-label">[Passport Number]</label>
                       <input type="text" id="passport_no" class="form-control uppercase-input" maxlength="15" placeholder="e.g. A01234567">
                     </div>
@@ -212,7 +213,7 @@
                 <div class="tt-control-col">
                   <div class="tt-inline-split">
                     <select id="marital_status" class="form-control tt-short-select"></select>
-                    <div class="tt-conditional-inline conditional-wrap hidden" id="wrap_spouse_name">
+                    <div class="tt-conditional-inline hidden" id="wrap_spouse_name">
                       <label for="spouse_name" class="tt-bracket-label">[Spouse Name]</label>
                       <input type="text" id="spouse_name" class="form-control uppercase-input" maxlength="50" placeholder="Spouse full name">
                     </div>
@@ -247,7 +248,7 @@
                 <div class="tt-control-col">
                   <div class="tt-inline-split">
                     <select id="quota" class="form-control tt-med-select"></select>
-                    <div class="tt-conditional-inline conditional-wrap hidden" id="wrap_quota_details">
+                    <div class="tt-conditional-inline hidden" id="wrap_quota_details">
                       <label for="quota_details" class="tt-bracket-label">[Quota Details]</label>
                       <input type="text" id="quota_details" class="form-control" maxlength="100" placeholder="Certificate No / Name / Date">
                     </div>
@@ -404,7 +405,7 @@
                     <label for="ssc_group" class="tt-label">Group/Subject</label>
                     <div class="tt-control-col">
                       <select id="ssc_group" class="form-control"></select>
-                      <div class="conditional-wrap hidden tt-sub-other" id="wrap_ssc_group_other">
+                      <div class="hidden tt-sub-other" id="wrap_ssc_group_other">
                         <input type="text" id="ssc_group_other" class="form-control" maxlength="50" placeholder="Specify other group/subject">
                       </div>
                     </div>
@@ -423,7 +424,7 @@
                     <label for="ssc_board" class="tt-label">Board</label>
                     <div class="tt-control-col">
                       <select id="ssc_board" class="form-control"></select>
-                      <div class="conditional-wrap hidden tt-sub-other" id="wrap_ssc_board_other">
+                      <div class="hidden tt-sub-other" id="wrap_ssc_board_other">
                         <input type="text" id="ssc_board_other" class="form-control" maxlength="50" placeholder="Specify other board name">
                       </div>
                     </div>
@@ -477,7 +478,7 @@
                     <label for="hsc_group" class="tt-label">Group/Subject</label>
                     <div class="tt-control-col">
                       <select id="hsc_group" class="form-control"></select>
-                      <div class="conditional-wrap hidden tt-sub-other" id="wrap_hsc_group_other">
+                      <div class="hidden tt-sub-other" id="wrap_hsc_group_other">
                         <input type="text" id="hsc_group_other" class="form-control" maxlength="50" placeholder="Specify other group/subject">
                       </div>
                     </div>
@@ -496,7 +497,7 @@
                     <label for="hsc_board" class="tt-label">Board</label>
                     <div class="tt-control-col">
                       <select id="hsc_board" class="form-control"></select>
-                      <div class="conditional-wrap hidden tt-sub-other" id="wrap_hsc_board_other">
+                      <div class="hidden tt-sub-other" id="wrap_hsc_board_other">
                         <input type="text" id="hsc_board_other" class="form-control" maxlength="50" placeholder="Specify other board name">
                       </div>
                     </div>
@@ -548,7 +549,7 @@
                     <label for="gra_institute" class="tt-label">University/Inst.</label>
                     <div class="tt-control-col">
                       <select id="gra_institute" class="form-control"></select>
-                      <div class="conditional-wrap hidden tt-sub-other" id="wrap_gra_institute_other">
+                      <div class="hidden tt-sub-other" id="wrap_gra_institute_other">
                         <input type="text" id="gra_institute_other" class="form-control" maxlength="100" placeholder="Specify university/institute">
                       </div>
                     </div>
@@ -567,7 +568,7 @@
                     <label for="gra_subject" class="tt-label">Subject/Degree</label>
                     <div class="tt-control-col">
                       <select id="gra_subject" class="form-control"></select>
-                      <div class="conditional-wrap hidden tt-sub-other" id="wrap_gra_subject_other">
+                      <div class="hidden tt-sub-other" id="wrap_gra_subject_other">
                         <input type="text" id="gra_subject_other" class="form-control" maxlength="100" placeholder="Specify subject/degree">
                       </div>
                     </div>
@@ -619,7 +620,7 @@
                     <label for="mas_institute" class="tt-label">University/Inst.</label>
                     <div class="tt-control-col">
                       <select id="mas_institute" class="form-control"></select>
-                      <div class="conditional-wrap hidden tt-sub-other" id="wrap_mas_institute_other">
+                      <div class="hidden tt-sub-other" id="wrap_mas_institute_other">
                         <input type="text" id="mas_institute_other" class="form-control" maxlength="100" placeholder="Specify university/institute">
                       </div>
                     </div>
@@ -638,7 +639,7 @@
                     <label for="mas_subject" class="tt-label">Subject/Degree</label>
                     <div class="tt-control-col">
                       <select id="mas_subject" class="form-control"></select>
-                      <div class="conditional-wrap hidden tt-sub-other" id="wrap_mas_subject_other">
+                      <div class="hidden tt-sub-other" id="wrap_mas_subject_other">
                         <input type="text" id="mas_subject_other" class="form-control" maxlength="100" placeholder="Specify subject/degree">
                       </div>
                     </div>

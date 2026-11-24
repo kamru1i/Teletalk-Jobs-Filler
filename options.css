@@ -33,6 +33,10 @@ body {
   display: none !important;
 }
 
+.section-disabled {
+  opacity: 0.72;
+}
+
 .bn-font {
   font-family: 'Noto Sans Bengali', 'SolaimanLipi', 'Vrinda', 'Segoe UI', sans-serif;
 }

@@ -6,8 +6,11 @@
   }
 
   const STYLE_ID = 'tjf-injected-styles';
+  const TOAST_HOST_ID = 'tjf-autofill-toast-host';
   const TOAST_ID = 'tjf-autofill-toast';
   const DEFAULT_WAIT_TIMEOUT_MS = 3000;
+  const EARLY_SETTLE_WAIT_MS = 600;
+  const MUTATION_DEBOUNCE_MS = 30;
 
   const MONTH_NAMES = [
     ['january', 'jan', '01', '1'],
@@ -127,7 +130,15 @@
     ['work charged basis under revenue budget', 'work charged'],
     ['autonomous/semi autonomous organization', 'autonomous / semi autonomous organization', 'autonomous organization', 'semi autonomous organization', 'autonomous'],
     ['private organization', 'private service', 'private company', 'private'],
-    ['business/self employed', 'business / self employed', 'self employed', 'self-employed', 'business']
+    ['business/self employed', 'business / self employed', 'self employed', 'self-employed', 'business'],
+
+    // Known Teletalk portal database spelling variants / typos
+    ['agronomy', 'agronnomy'],
+    ['crop botany', 'corp botany'],
+    ['parasitology', 'paratrology'],
+    ['surgery & obstetrics', 'surgery & obstate'],
+    ['microbiology & hygiene', 'microbiology & hygenic'],
+    ['farm machinery', 'firm machinery']
   ];
 
   const ALIAS_LOOKUP = (() => {
@@ -160,17 +171,48 @@
     return normalizeText(str).replace(/[^a-z0-9\u0980-\u09ff]/g, '');
   }
 
-  function escapeRegExp(str) {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const sectionContainerCache = new Map();
+
+  function formatLocalDateIso(date = new Date()) {
+    const d = date instanceof Date ? date : new Date(date);
+    const yyyy = String(d.getFullYear());
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   }
 
   function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  function findLabelForId(id) {
+    if (!id) return null;
+    const esc = typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(id) : id;
+    try {
+      const direct = document.querySelector(`label[for="${esc}"]`);
+      if (direct) return direct;
+    } catch (_err) {
+      // Fallback for simplified DOM test harnesses
+    }
+    return Array.from(document.querySelectorAll('label')).find((l) => l.htmlFor === id) || null;
+  }
+
   function isElementVisible(el) {
     if (!el || !el.isConnected) return false;
     if (el.type === 'hidden') return false;
+    if (typeof el.checkVisibility === 'function') {
+      if (!el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) {
+        return false;
+      }
+      let ancestor = el;
+      while (ancestor && ancestor !== document.body && ancestor.nodeType === 1) {
+        if ((ancestor.classList && ancestor.classList.contains('hide')) || ancestor.hidden) {
+          return false;
+        }
+        ancestor = ancestor.parentElement;
+      }
+      return true;
+    }
     let curr = el;
     while (curr && curr !== document.body && curr.nodeType === 1) {
       const style = window.getComputedStyle(curr);
@@ -206,7 +248,7 @@
     }
 
     if (el.id) {
-      const lbl = Array.from(document.querySelectorAll('label')).find((l) => l.htmlFor === el.id);
+      const lbl = findLabelForId(el.id);
       if (lbl && /enter\s+the\s+verification\s+code|\bcaptcha\b|security\s*code/i.test(lbl.textContent || '')) {
         return true;
       }
@@ -238,6 +280,12 @@
     if (!sectionKey || sectionKey === 'basic') {
       return document;
     }
+    if (sectionContainerCache.has(sectionKey)) {
+      const cached = sectionContainerCache.get(sectionKey);
+      if (cached === document || cached.isConnected) {
+        return cached;
+      }
+    }
 
     const sectionIdHints = {
       ssc: ['#sscSection', '#ssc_section', '#ssc_fieldset'],
@@ -251,7 +299,10 @@
     if (sectionIdHints[sectionKey]) {
       for (const sel of sectionIdHints[sectionKey]) {
         const found = document.querySelector(sel);
-        if (found) return found;
+        if (found) {
+          sectionContainerCache.set(sectionKey, found);
+          return found;
+        }
       }
     }
 
@@ -273,6 +324,7 @@
     for (const fs of fieldsets) {
       const legend = fs.querySelector('legend');
       if (legend && rx.test(legend.textContent || '')) {
+        sectionContainerCache.set(sectionKey, fs);
         return fs;
       }
     }
@@ -282,10 +334,14 @@
       const txt = normalizeText(node.textContent || '');
       if (txt.length > 0 && txt.length < 90 && rx.test(txt)) {
         const container = node.closest('fieldset, section, .card, .panel, table');
-        if (container) return container;
+        if (container) {
+          sectionContainerCache.set(sectionKey, container);
+          return container;
+        }
       }
     }
 
+    sectionContainerCache.set(sectionKey, document);
     return document;
   }
 
@@ -442,6 +498,49 @@
     return Array.from(candidates);
   }
 
+  function isAlphaNumChar(ch) {
+    return (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9');
+  }
+
+  function hasWordBoundaryMatch(haystack, needle) {
+    if (!haystack || !needle || needle.length < 4) return false;
+    let start = 0;
+    while (true) {
+      const idx = haystack.indexOf(needle, start);
+      if (idx === -1) return false;
+      const beforeOk = idx === 0 || !isAlphaNumChar(haystack[idx - 1]);
+      const afterIdx = idx + needle.length;
+      const afterOk = afterIdx === haystack.length || !isAlphaNumChar(haystack[afterIdx]);
+      if (beforeOk && afterOk) return true;
+      start = idx + 1;
+    }
+  }
+
+  function getBigrams(str) {
+    const grams = new Map();
+    for (let i = 0; i < str.length - 1; i++) {
+      const bg = str.slice(i, i + 2);
+      grams.set(bg, (grams.get(bg) || 0) + 1);
+    }
+    return grams;
+  }
+
+  function diceCoefficient(a, b) {
+    if (!a || !b || a.length < 2 || b.length < 2) return 0;
+    if (a === b) return 1;
+    const gramsA = getBigrams(a);
+    let matches = 0;
+    for (let i = 0; i < b.length - 1; i++) {
+      const bg = b.slice(i, i + 2);
+      const cnt = gramsA.get(bg) || 0;
+      if (cnt > 0) {
+        matches++;
+        gramsA.set(bg, cnt - 1);
+      }
+    }
+    return (2 * matches) / (a.length - 1 + (b.length - 1));
+  }
+
   function findMatchingOption(selectEl, targetValue) {
     if (!selectEl || !targetValue) return null;
     const options = Array.from(selectEl.options || []).filter((opt) => {
@@ -458,21 +557,32 @@
 
     const candidates = buildTargetCandidates(targetValue);
     const compactCandidates = candidates.map((c) => compactText(c)).filter(Boolean);
+    const optRecords = options.map((opt) => {
+      const normText = normalizeText(opt.textContent);
+      const normVal = normalizeText(opt.value);
+      return {
+        opt,
+        normText,
+        normVal,
+        compText: compactText(normText),
+        compVal: compactText(normVal)
+      };
+    });
 
     // Tier 1: Exact value or normalized case-insensitive exact label
     for (const cand of candidates) {
-      for (const opt of options) {
-        if (normalizeText(opt.value) === cand || normalizeText(opt.textContent) === cand) {
-          return opt;
+      for (const rec of optRecords) {
+        if (rec.normVal === cand || rec.normText === cand) {
+          return rec.opt;
         }
       }
     }
 
     // Tier 2: Compact alphanumeric/Bangla comparison (handles S.S.C vs SSC, NarailSadar vs Narail Sadar, GPA(out of 5) vs GPA (out of 5))
     for (const comp of compactCandidates) {
-      for (const opt of options) {
-        if (compactText(opt.textContent) === comp || compactText(opt.value) === comp) {
-          return opt;
+      for (const rec of optRecords) {
+        if (rec.compText === comp || rec.compVal === comp) {
+          return rec.opt;
         }
       }
     }
@@ -480,31 +590,47 @@
     // Tier 3: Parenthetical / Sadar strip match (e.g. "Barishal Sadar" <-> "Barishal Sadar (Kotwali)")
     for (const cand of candidates) {
       const candBase = cand.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
-      for (const opt of options) {
-        const optNorm = normalizeText(opt.textContent);
-        const optBase = optNorm.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
-        if (candBase && optBase && (optBase === candBase || compactText(optBase) === compactText(candBase))) {
-          return opt;
+      const candBaseComp = compactText(candBase);
+      for (const rec of optRecords) {
+        const optBase = rec.normText.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+        if (candBase && optBase && (optBase === candBase || compactText(optBase) === candBaseComp)) {
+          return rec.opt;
         }
       }
     }
 
-    // Tier 4: Safe word-boundary substring match (min 4 chars; prevents "male" matching "female")
+    // Tier 4: Allocation-free word-boundary match (min 4 chars; prevents "male" matching "female")
     for (const cand of candidates) {
       if (cand.length < 4) continue;
-      const wordRx = new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(cand)}(?:$|[^a-z0-9])`, 'i');
-      for (const opt of options) {
-        const optNorm = normalizeText(opt.textContent);
-        if (wordRx.test(optNorm)) {
-          return opt;
-        }
-        if (optNorm.length >= 4) {
-          const revRx = new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(optNorm)}(?:$|[^a-z0-9])`, 'i');
-          if (revRx.test(cand)) {
-            return opt;
-          }
+      for (const rec of optRecords) {
+        if (hasWordBoundaryMatch(rec.normText, cand) || hasWordBoundaryMatch(cand, rec.normText)) {
+          return rec.opt;
         }
       }
+    }
+
+    // Tier 5: High-confidence Bigram Dice similarity for unlisted minor Teletalk DB typos
+    let bestOpt = null;
+    let bestScore = 0;
+    let secondScore = 0;
+    for (const rec of optRecords) {
+      if (rec.compText.length < 6) continue;
+      let optBest = 0;
+      for (const comp of compactCandidates) {
+        if (comp.length < 6) continue;
+        const score = diceCoefficient(comp, rec.compText);
+        if (score > optBest) optBest = score;
+      }
+      if (optBest > bestScore) {
+        secondScore = bestScore;
+        bestScore = optBest;
+        bestOpt = rec.opt;
+      } else if (optBest > secondScore) {
+        secondScore = optBest;
+      }
+    }
+    if (bestOpt && bestScore >= 0.86 && (bestScore - secondScore) >= 0.05) {
+      return bestOpt;
     }
 
     return null;
@@ -537,6 +663,8 @@
 
       let done = false;
       let observer = null;
+      let debounceId = null;
+      let quietSettleId = null;
       let pollId = null;
       let timeoutId = null;
 
@@ -544,28 +672,56 @@
         if (done) return;
         done = true;
         if (observer) observer.disconnect();
+        if (debounceId) clearTimeout(debounceId);
+        if (quietSettleId) clearTimeout(quietSettleId);
         if (pollId) clearInterval(pollId);
         if (timeoutId) clearTimeout(timeoutId);
         resolve(result);
       };
 
+      const scheduleQuietSettle = () => {
+        if (quietSettleId) clearTimeout(quietSettleId);
+        const currentSel = finderFn();
+        if (currentSel && !currentSel.disabled && getValidOptionCount(currentSel) > 0) {
+          quietSettleId = setTimeout(() => {
+            finish(checkReady() || finderFn());
+          }, EARLY_SETTLE_WAIT_MS);
+        }
+      };
+
+      const evaluate = () => {
+        const found = checkReady();
+        if (found) {
+          finish(found);
+          return;
+        }
+        scheduleQuietSettle();
+      };
+
+      const initialTarget = finderFn();
       if (typeof MutationObserver !== 'undefined' && document.body) {
+        const observeNode = initialTarget && initialTarget.nodeType === 1 ? initialTarget : document.body;
+        const observeOpts = observeNode === document.body
+          ? { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'class', 'style'] }
+          : { childList: true, subtree: false, attributes: true, attributeFilter: ['disabled'] };
+
         observer = new MutationObserver(() => {
-          const found = checkReady();
-          if (found) finish(found);
+          if (quietSettleId) {
+            clearTimeout(quietSettleId);
+            quietSettleId = null;
+          }
+          if (debounceId) clearTimeout(debounceId);
+          debounceId = setTimeout(evaluate, MUTATION_DEBOUNCE_MS);
         });
-        observer.observe(document.body, {
-          childList: true,
-          subtree: true,
-          attributes: true,
-          attributeFilter: ['disabled', 'class', 'style']
-        });
+        observer.observe(observeNode, observeOpts);
       }
 
+      scheduleQuietSettle();
+      const pollMs = observer ? 250 : 80;
       pollId = setInterval(() => {
         const found = checkReady();
         if (found) finish(found);
-      }, 80);
+      }, pollMs);
 
       timeoutId = setTimeout(() => {
         finish(finderFn());
@@ -589,6 +745,7 @@
 
       let done = false;
       let observer = null;
+      let debounceId = null;
       let pollId = null;
       let timeoutId = null;
 
@@ -596,17 +753,26 @@
         if (done) return;
         done = true;
         if (observer) observer.disconnect();
+        if (debounceId) clearTimeout(debounceId);
         if (pollId) clearInterval(pollId);
         if (timeoutId) clearTimeout(timeoutId);
         resolve(result);
       };
 
+      const initialTarget = finderFn();
       if (typeof MutationObserver !== 'undefined' && document.body) {
+        const observeNode =
+          (initialTarget && typeof initialTarget.closest === 'function' && initialTarget.closest('fieldset, form')) ||
+          (initialTarget && initialTarget.parentElement) ||
+          document.body;
         observer = new MutationObserver(() => {
-          const found = checkReady();
-          if (found) finish(found);
+          if (debounceId) clearTimeout(debounceId);
+          debounceId = setTimeout(() => {
+            const found = checkReady();
+            if (found) finish(found);
+          }, MUTATION_DEBOUNCE_MS);
         });
-        observer.observe(document.body, {
+        observer.observe(observeNode, {
           childList: true,
           subtree: true,
           attributes: true,
@@ -614,10 +780,11 @@
         });
       }
 
+      const pollMs = observer ? 250 : 80;
       pollId = setInterval(() => {
         const found = checkReady();
         if (found) finish(found);
-      }, 80);
+      }, pollMs);
 
       timeoutId = setTimeout(() => {
         finish(finderFn());
@@ -645,6 +812,28 @@
         background-color: #fefce8 !important;
         transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
       }
+    `;
+  }
+
+  let toastAutoHideTimer = null;
+  let toastRefs = null;
+
+  function ensureToastUi() {
+    if (toastRefs && toastRefs.host && toastRefs.host.isConnected) {
+      return toastRefs;
+    }
+
+    const oldLightToast = document.getElementById(TOAST_ID);
+    if (oldLightToast) oldLightToast.remove();
+    const existingHost = document.getElementById(TOAST_HOST_ID);
+    if (existingHost) existingHost.remove();
+
+    const host = document.createElement('div');
+    host.id = TOAST_HOST_ID;
+    const shadowRoot = typeof host.attachShadow === 'function' ? host.attachShadow({ mode: 'closed' }) : host;
+
+    const toastStyle = document.createElement('style');
+    toastStyle.textContent = `
       #${TOAST_ID} {
         position: fixed;
         right: 20px;
@@ -698,44 +887,49 @@
         opacity: 1;
       }
     `;
-  }
 
-  let toastAutoHideTimer = null;
+    const box = document.createElement('div');
+    box.id = TOAST_ID;
+    const body = document.createElement('div');
+    body.className = 'tjf-toast-body';
+    const titleEl = document.createElement('div');
+    titleEl.className = 'tjf-toast-title';
+    const subEl = document.createElement('div');
+    subEl.className = 'tjf-toast-sub';
+    body.appendChild(titleEl);
+    body.appendChild(subEl);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'tjf-toast-close';
+    closeBtn.textContent = '✕';
+    closeBtn.title = 'Dismiss';
+    closeBtn.addEventListener('click', () => {
+      if (toastAutoHideTimer) {
+        clearTimeout(toastAutoHideTimer);
+        toastAutoHideTimer = null;
+      }
+      host.remove();
+      toastRefs = null;
+    });
+
+    box.appendChild(body);
+    box.appendChild(closeBtn);
+    shadowRoot.appendChild(toastStyle);
+    shadowRoot.appendChild(box);
+    (document.body || document.documentElement).appendChild(host);
+
+    toastRefs = { host, box, titleEl, subEl };
+    return toastRefs;
+  }
 
   function showToast(title, subtitle = '', variant = 'info', autoHideMs = 0) {
     injectStyles();
-    let toast = document.getElementById(TOAST_ID);
-    if (!toast) {
-      toast = document.createElement('div');
-      toast.id = TOAST_ID;
-      const body = document.createElement('div');
-      body.className = 'tjf-toast-body';
-      const titleEl = document.createElement('div');
-      titleEl.className = 'tjf-toast-title';
-      const subEl = document.createElement('div');
-      subEl.className = 'tjf-toast-sub';
-      body.appendChild(titleEl);
-      body.appendChild(subEl);
-
-      const closeBtn = document.createElement('button');
-      closeBtn.type = 'button';
-      closeBtn.className = 'tjf-toast-close';
-      closeBtn.textContent = '✕';
-      closeBtn.title = 'Dismiss';
-      closeBtn.addEventListener('click', () => {
-        toast.remove();
-      });
-
-      toast.appendChild(body);
-      toast.appendChild(closeBtn);
-      (document.body || document.documentElement).appendChild(toast);
-    }
-
-    toast.className = variant === 'warn' ? 'tjf-toast-warn' : '';
-    toast.querySelector('.tjf-toast-title').textContent = title;
-    const subEl = toast.querySelector('.tjf-toast-sub');
-    subEl.textContent = subtitle;
-    subEl.style.display = subtitle ? 'block' : 'none';
+    const ui = ensureToastUi();
+    ui.box.className = variant === 'warn' ? 'tjf-toast-warn' : '';
+    ui.titleEl.textContent = title;
+    ui.subEl.textContent = subtitle;
+    ui.subEl.style.display = subtitle ? 'block' : 'none';
 
     if (toastAutoHideTimer) {
       clearTimeout(toastAutoHideTimer);
@@ -743,8 +937,11 @@
     }
     if (autoHideMs > 0) {
       toastAutoHideTimer = setTimeout(() => {
-        const current = document.getElementById(TOAST_ID);
-        if (current) current.remove();
+        if (toastRefs && toastRefs.host) {
+          toastRefs.host.remove();
+        }
+        toastRefs = null;
+        toastAutoHideTimer = null;
       }, autoHideMs);
     }
   }
@@ -765,10 +962,13 @@
     el.addEventListener('change', clearFn, { once: false });
   }
 
-  function markFilled(el) {
+  function markFilled(el, stats) {
     if (!el) return;
     el.classList.remove('tjf-field-warning');
     el.classList.add('tjf-field-filled');
+    if (stats && stats.mismatchedElements) {
+      stats.mismatchedElements.delete(el);
+    }
     attachClearOnEdit(el);
   }
 
@@ -797,7 +997,7 @@
     if (!el || !value) return false;
     // Leave pre-verified locked fields intact if already populated
     if ((el.disabled || el.readOnly) && String(el.value || '').trim() !== '') {
-      markFilled(el);
+      markFilled(el, stats);
       stats.filledCount++;
       return true;
     }
@@ -809,7 +1009,7 @@
 
     setNativeValue(el, finalVal);
     dispatchFieldEvents(el, true);
-    markFilled(el);
+    markFilled(el, stats);
     stats.filledCount++;
     return true;
   }
@@ -817,7 +1017,7 @@
   function selectOptionSmart(selectEl, targetValue, stats) {
     if (!selectEl || !targetValue) return false;
     if ((selectEl.disabled || selectEl.readOnly) && String(selectEl.value || '').trim() !== '') {
-      markFilled(selectEl);
+      markFilled(selectEl, stats);
       stats.filledCount++;
       return true;
     }
@@ -833,7 +1033,7 @@
     setNativeValue(selectEl, matched.value);
     matched.selected = true;
     dispatchFieldEvents(selectEl, false);
-    markFilled(selectEl);
+    markFilled(selectEl, stats);
     stats.filledCount++;
     return true;
   }
@@ -852,13 +1052,19 @@
       const targetNorm = normalizeText(targetValue);
       const candidates = buildTargetCandidates(targetValue);
       for (const radio of radios) {
-        const lbl = radio.id ? document.querySelector(`label[for="${CSS.escape(radio.id)}"]`) : radio.closest('label');
+        const lbl = radio.id ? findLabelForId(radio.id) : radio.closest('label');
         const lblText = normalizeText(lbl ? lbl.textContent : '');
         const valText = normalizeText(radio.value);
         if (candidates.includes(valText) || candidates.includes(lblText) || (targetNorm && valText === targetNorm)) {
+          const hadChecked = Boolean(radio.checked);
           radio.click();
-          dispatchFieldEvents(radio, false);
-          markFilled(radio);
+          if (!radio.checked) {
+            radio.checked = true;
+            dispatchFieldEvents(radio, false);
+          } else if (!hadChecked) {
+            // Native radio.click() already transitioned checked state & fired events
+          }
+          markFilled(radio, stats);
           stats.filledCount++;
           return true;
         }
@@ -875,13 +1081,19 @@
       (inputEl.title || '')
     ).toLowerCase();
 
-    if (/yyyy[-/]mm[-/]dd/.test(hint)) {
-      return `${yyyy}-${mm}-${dd}`;
+    const yyyyFirst = hint.match(/yyyy([-/.])mm\1dd/);
+    if (yyyyFirst) {
+      const sep = yyyyFirst[1];
+      return `${yyyy}${sep}${mm}${sep}${dd}`;
     }
-    if (/dd[-/]mm[-/]yyyy/.test(hint)) {
-      return `${dd}/${mm}/${yyyy}`;
+    const ddFirst = hint.match(/dd([-/.])mm\1yyyy/);
+    if (ddFirst) {
+      const sep = ddFirst[1];
+      return `${dd}${sep}${mm}${sep}${yyyy}`;
     }
-    return `${mm}/${dd}/${yyyy}`;
+    const mmFirst = hint.match(/mm([-/.])dd\1yyyy/);
+    const sep = mmFirst ? mmFirst[1] : '/';
+    return `${mm}${sep}${dd}${sep}${yyyy}`;
   }
 
   function fillDob(dobValue, stats) {
@@ -891,7 +1103,7 @@
     const mainDob = findFieldElement(FIELD_MAP.dob);
     if (mainDob) {
       if ((mainDob.disabled || mainDob.readOnly) && String(mainDob.value || '').trim() !== '') {
-        markFilled(mainDob);
+        markFilled(mainDob, stats);
         stats.filledCount++;
         return;
       }
@@ -899,7 +1111,7 @@
         const valToSet = mainDob.type === 'date' ? dobValue : formatDobForTextInput(dobValue, mainDob);
         setNativeValue(mainDob, valToSet);
         dispatchFieldEvents(mainDob, true);
-        markFilled(mainDob);
+        markFilled(mainDob, stats);
         stats.filledCount++;
         return;
       }
@@ -912,9 +1124,8 @@
 
     if (dayEl) {
       const dayNum = String(parseInt(dd, 10));
-      if (!selectOptionSmart(dayEl, dd, stats)) {
-        selectOptionSmart(dayEl, dayNum, stats);
-      }
+      const dayChoice = findMatchingOption(dayEl, dd) ? dd : dayNum;
+      selectOptionSmart(dayEl, dayChoice, stats);
     }
     if (monthEl) {
       const monthIdx = parseInt(mm, 10) - 1;
@@ -1470,7 +1681,11 @@
 
     // 1. Examination FIRST because selecting Exam triggers population of Group/Subject options
     if (data[`${prefix}_exam`]) {
-      const examEl = await waitForSelectOptions(() => findFieldElement(examDesc), data[`${prefix}_exam`]);
+      const initialExamEl = findFieldElement(examDesc);
+      const examEl =
+        initialExamEl && getValidOptionCount(initialExamEl) > 0
+          ? initialExamEl
+          : await waitForSelectOptions(() => findFieldElement(examDesc), data[`${prefix}_exam`]);
       selectOptionSmart(examEl, data[`${prefix}_exam`], stats);
     }
 
@@ -1518,6 +1733,48 @@
     }
   }
 
+  async function ensureApplicableCheckboxEnabled(
+    checkbox,
+    scope,
+    targetFinderFn,
+    unlockSelector,
+    stats,
+    markCheckboxFilled = false
+  ) {
+    if (!checkbox) return;
+    if (!checkbox.checked) {
+      toggleCheckbox(checkbox, true);
+      if (!checkbox.checked && checkbox.id) {
+        const lbl = findLabelForId(checkbox.id);
+        if (lbl) lbl.click();
+      }
+      if (!checkbox.checked && !checkbox.disabled) {
+        checkbox.checked = true;
+        dispatchFieldEvents(checkbox, false);
+      }
+    }
+
+    if (markCheckboxFilled && checkbox.checked) {
+      markFilled(checkbox, stats);
+      stats.filledCount++;
+    }
+
+    const enabledTarget = await waitForVisibleAndEnabled(targetFinderFn, 1500);
+    if (checkbox.checked && (!enabledTarget || enabledTarget.disabled)) {
+      const root = scope && scope !== document ? scope : document;
+      for (const ctrl of root.querySelectorAll(unlockSelector)) {
+        if (ctrl === checkbox) continue;
+        if (ctrl.classList && ctrl.classList.contains('job_end_date')) {
+          const block = typeof ctrl.closest === 'function' ? ctrl.closest('.jobExpTemplate') : null;
+          const cw = block && block.querySelector('.currently_working');
+          if (cw && cw.checked) continue;
+        }
+        ctrl.disabled = false;
+        ctrl.removeAttribute('disabled');
+      }
+    }
+  }
+
   async function fillHigherEduBlock(prefix, applicableFlag, data, stats) {
     const checkDesc = FIELD_MAP[`${prefix}_applicable`];
     const examDesc = FIELD_MAP[`${prefix}_exam`];
@@ -1536,13 +1793,28 @@
     }
 
     if (checkbox) {
-      toggleCheckbox(checkbox, true);
-      await waitForVisibleAndEnabled(() => findFieldElement(examDesc));
+      const sectionKey = prefix === 'gra' ? 'graduation' : 'masters';
+      const eduScope = findSectionContainer(sectionKey);
+      const unlockSel = eduScope && eduScope !== document
+        ? 'input, select, textarea'
+        : `#${prefix}_exam, #${prefix}_subject, #${prefix}_subject_other, #${prefix}_institute, #${prefix}_institute_other, #${prefix}_result_type, #${prefix}_result, #${prefix}_year, #${prefix}_duration`;
+      await ensureApplicableCheckboxEnabled(
+        checkbox,
+        eduScope,
+        () => findFieldElement(examDesc),
+        unlockSel,
+        stats,
+        false
+      );
     }
 
     // 1. Examination FIRST because it populates Subject/Degree options
     if (data[`${prefix}_exam`]) {
-      const examEl = await waitForSelectOptions(() => findFieldElement(examDesc), data[`${prefix}_exam`]);
+      const initialExamEl = findFieldElement(examDesc);
+      const examEl =
+        initialExamEl && getValidOptionCount(initialExamEl) > 0
+          ? initialExamEl
+          : await waitForSelectOptions(() => findFieldElement(examDesc), data[`${prefix}_exam`]);
       selectOptionSmart(examEl, data[`${prefix}_exam`], stats);
     }
 
@@ -1604,7 +1876,7 @@
   function fillDateControl(el, isoDate, stats) {
     if (!el || !isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return false;
     if ((el.disabled || el.readOnly) && String(el.value || '').trim() !== '') {
-      markFilled(el);
+      markFilled(el, stats);
       stats.filledCount++;
       return true;
     }
@@ -1613,7 +1885,7 @@
     const valToSet = el.type === 'date' ? isoDate : formatDobForTextInput(isoDate, el);
     setNativeValue(el, valToSet);
     dispatchFieldEvents(el, true);
-    markFilled(el);
+    markFilled(el, stats);
     stats.filledCount++;
     return true;
   }
@@ -1627,7 +1899,7 @@
   }
 
   async function fillSingleJobBlock(job, getControl, stats) {
-    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayIso = formatLocalDateIso();
 
     if (job.employment_type) {
       selectOptionSmart(getControl('employment_type', '.employment_type'), job.employment_type, stats);
@@ -1642,7 +1914,7 @@
     if (job.currently_working) {
       if (currCb && !currCb.disabled) {
         toggleCheckbox(currCb, true);
-        markFilled(currCb);
+        markFilled(currCb, stats);
         stats.filledCount++;
         await delay(100);
       }
@@ -1727,48 +1999,21 @@
     if (!hasJobSection) return;
 
     if (expCheckbox) {
-      if (!expCheckbox.checked) {
-        toggleCheckbox(expCheckbox, true);
-        if (!expCheckbox.checked && expCheckbox.id) {
-          const lbl = Array.from(document.querySelectorAll('label')).find((l) => l.htmlFor === expCheckbox.id);
-          if (lbl) lbl.click();
-        }
-        if (!expCheckbox.checked && !expCheckbox.disabled) {
-          expCheckbox.checked = true;
-          dispatchFieldEvents(expCheckbox, false);
-        }
-      }
-
-      if (expCheckbox.checked) {
-        markFilled(expCheckbox);
-        stats.filledCount++;
-      }
-
-      const enabledTarget = await waitForVisibleAndEnabled(
+      const unlockSelector =
+        scope !== document
+          ? 'input, select, textarea, button'
+          : '.jobExpTemplate input, .jobExpTemplate select, .jobExpTemplate textarea, .jobExpTemplate button, #addNewJob';
+      await ensureApplicableCheckboxEnabled(
+        expCheckbox,
+        scope,
         () =>
           scope.querySelector('.employment_type') ||
           scope.querySelector('[name="job[0][employment_type]"]') ||
           document.getElementById('employment_type'),
-        1500
+        unlockSelector,
+        stats,
+        true
       );
-
-      // Fallback unlock if Teletalk's handler left job fields disabled despite If Applicable being checked
-      if (expCheckbox.checked && (!enabledTarget || enabledTarget.disabled)) {
-        const unlockSelector =
-          scope !== document
-            ? 'input, select, textarea, button'
-            : '.jobExpTemplate input, .jobExpTemplate select, .jobExpTemplate textarea, .jobExpTemplate button, #addNewJob';
-        for (const ctrl of scope.querySelectorAll(unlockSelector)) {
-          if (ctrl === expCheckbox) continue;
-          if (ctrl.classList && ctrl.classList.contains('job_end_date')) {
-            const block = ctrl.closest('.jobExpTemplate');
-            const cw = block && block.querySelector('.currently_working');
-            if (cw && cw.checked) continue;
-          }
-          ctrl.disabled = false;
-          ctrl.removeAttribute('disabled');
-        }
-      }
     }
 
     const getBlocks = () => Array.from(scope.querySelectorAll('.jobExpTemplate'));
@@ -1828,7 +2073,7 @@
       return insideLabel.textContent;
     }
     if (selectEl && selectEl.id) {
-      const forLabel = Array.from(document.querySelectorAll('label')).find((l) => l.htmlFor === selectEl.id);
+      const forLabel = findLabelForId(selectEl.id);
       if (forLabel && forLabel.textContent) {
         return forLabel.textContent;
       }
@@ -1841,7 +2086,7 @@
       return;
     }
 
-    const COMPUTER_Q_REGEX = /\bcomputer\b|proficiency\s+in\s+operating|relevant\s+field|কম্পিউটার/i;
+    const COMPUTER_Q_REGEX = /\bcomputer\b|proficiency\s+in\s+operating\s+(?:a\s+)?computer|ms[\s.-]*office|typing\s+speed|কম্পিউটার/i;
     const otherContainer = findSectionContainer('other_experience');
     const otherSectionById = document.getElementById('otherExpSection');
     const searchRoot =
@@ -1879,12 +2124,12 @@
 
     let filledAny = false;
     for (const { selectEl, row } of candidateEntries) {
-      const qText = findRowQuestionText(row, selectEl);
-      if (
-        COMPUTER_Q_REGEX.test(qText) ||
-        selectEl.name === 'other_exp[0][value]' ||
-        selectEl.id === 'other_exp[0][value]'
-      ) {
+      const qText = String(findRowQuestionText(row, selectEl) || '').trim();
+      const isExplicitComputer = COMPUTER_Q_REGEX.test(qText);
+      const isBlankOtherExp0 =
+        qText === '' &&
+        (selectEl.name === 'other_exp[0][value]' || selectEl.id === 'other_exp[0][value]');
+      if (isExplicitComputer || isBlankOtherExp0) {
         if (selectOptionSmart(selectEl, 'Yes', stats)) {
           filledAny = true;
         }
@@ -1905,23 +2150,27 @@
       }
     }
 
-    // Single-Yes #otherExpSection fallback when wording differs slightly
+    // Single-Yes #otherExpSection fallback when label explicitly mentions computer or has blank text
     if (!filledAny) {
       const scopedOther = otherSectionById || (otherContainer && otherContainer !== document ? otherContainer : null);
       if (scopedOther) {
         const selectsInSection = Array.from(scopedOther.querySelectorAll('select'));
         if (selectsInSection.length === 1) {
           const singleSel = selectsInSection[0];
-          const nonPlaceholderOpts = Array.from(singleSel.options || []).filter((opt) => {
-            const normVal = normalizeText(opt.value || '');
-            const normTxt = normalizeText(opt.textContent || '');
-            return (normVal !== '' || normTxt !== '') && normTxt !== 'select' && normTxt !== 'choose';
-          });
-          if (
-            nonPlaceholderOpts.length === 1 &&
-            normalizeText(nonPlaceholderOpts[0].textContent || nonPlaceholderOpts[0].value) === 'yes'
-          ) {
-            selectOptionSmart(singleSel, 'Yes', stats);
+          const row = singleSel.closest('.other_exp, .form-group, .row, tr') || singleSel.parentElement;
+          const qText = String(findRowQuestionText(row, singleSel) || '').trim();
+          if (qText === '' || COMPUTER_Q_REGEX.test(qText)) {
+            const nonPlaceholderOpts = Array.from(singleSel.options || []).filter((opt) => {
+              const normVal = normalizeText(opt.value || '');
+              const normTxt = normalizeText(opt.textContent || '');
+              return (normVal !== '' || normTxt !== '') && normTxt !== 'select' && normTxt !== 'choose';
+            });
+            if (
+              nonPlaceholderOpts.length === 1 &&
+              normalizeText(nonPlaceholderOpts[0].textContent || nonPlaceholderOpts[0].value) === 'yes'
+            ) {
+              selectOptionSmart(singleSel, 'Yes', stats);
+            }
           }
         }
       }
@@ -1947,199 +2196,218 @@
   }
 
   async function autofillForm(profileData, profileName = '') {
-    const data = profileData || {};
-    const stats = {
-      filledCount: 0,
-      mismatchedElements: new Set(),
-      missingJobProfileData: false
-    };
-
-    clearPreviousHighlights();
-    const label = profileName ? ` (${profileName})` : '';
-
-    // Step 1: Basic Information
-    showToast(`⏳ Step 1/4: Filling Basic Information${label}...`, 'Matching names, DOB, IDs, mobile & quota');
-
-    fillTextField(findFieldElement(FIELD_MAP.name), data.name, stats);
-    fillTextField(findFieldElement(FIELD_MAP.name_bn), data.name_bn, stats);
-    fillTextField(findFieldElement(FIELD_MAP.father), data.father, stats);
-    fillTextField(findFieldElement(FIELD_MAP.father_bn), data.father_bn, stats);
-    fillTextField(findFieldElement(FIELD_MAP.mother), data.mother, stats);
-    fillTextField(findFieldElement(FIELD_MAP.mother_bn), data.mother_bn, stats);
-
-    fillDob(data.dob, stats);
-
-    fillSelectOrRadio(FIELD_MAP.nationality, data.nationality || 'Bangladeshi', stats);
-    fillSelectOrRadio(FIELD_MAP.religion, data.religion, stats);
-    fillSelectOrRadio(FIELD_MAP.gender, data.gender, stats);
-
-    await fillYesNoWithDetails(FIELD_MAP.nid_has, FIELD_MAP.nid_no, data.nid_has, data.nid_no, stats);
-    await fillYesNoWithDetails(FIELD_MAP.breg_has, FIELD_MAP.breg_no, data.breg_has, data.breg_no, stats);
-    await fillYesNoWithDetails(FIELD_MAP.passport_has, FIELD_MAP.passport_no, data.passport_has, data.passport_no, stats);
-
-    if (data.marital_status) {
-      const maritalOk = fillSelectOrRadio(FIELD_MAP.marital_status, data.marital_status, stats);
-      if (maritalOk && normalizeText(data.marital_status) === 'married' && data.spouse_name) {
-        const spouseEl = await waitForVisibleAndEnabled(() => findFieldElement(FIELD_MAP.spouse_name));
-        fillTextField(spouseEl, data.spouse_name, stats);
-      }
+    if (typeof window !== 'undefined' && window.__TJF_AUTOFILL_RUNNING__) {
+      return {
+        ok: false,
+        busy: true,
+        error: 'Autofill is already in progress on this page.'
+      };
     }
+    if (typeof window !== 'undefined') {
+      window.__TJF_AUTOFILL_RUNNING__ = true;
+    }
+    sectionContainerCache.clear();
 
-    fillTextField(findFieldElement(FIELD_MAP.mobile), data.mobile, stats);
-    fillTextField(findFieldElement(FIELD_MAP.confirm_mobile), data.confirm_mobile || data.mobile, stats);
-    fillTextField(findFieldElement(FIELD_MAP.email), data.email, stats);
+    try {
+      const data = profileData || {};
+      const stats = {
+        filledCount: 0,
+        mismatchedElements: new Set(),
+        missingJobProfileData: false
+      };
 
-    if (data.quota) {
-      const quotaOk = fillSelectOrRadio(FIELD_MAP.quota, data.quota, stats);
-      if (quotaOk && normalizeText(data.quota) !== 'not applicable' && data.quota_details) {
-        const quotaDetEl = await waitForVisibleAndEnabled(() => findFieldElement(FIELD_MAP.quota_details), 1200);
-        if (quotaDetEl && isElementInteractive(quotaDetEl)) {
-          fillTextField(quotaDetEl, data.quota_details, stats);
+      clearPreviousHighlights();
+      const label = profileName ? ` (${profileName})` : '';
+
+      // Step 1: Basic Information
+      showToast(`⏳ Step 1/4: Filling Basic Information${label}...`, 'Matching names, DOB, IDs, mobile & quota');
+
+      fillTextField(findFieldElement(FIELD_MAP.name), data.name, stats);
+      fillTextField(findFieldElement(FIELD_MAP.name_bn), data.name_bn, stats);
+      fillTextField(findFieldElement(FIELD_MAP.father), data.father, stats);
+      fillTextField(findFieldElement(FIELD_MAP.father_bn), data.father_bn, stats);
+      fillTextField(findFieldElement(FIELD_MAP.mother), data.mother, stats);
+      fillTextField(findFieldElement(FIELD_MAP.mother_bn), data.mother_bn, stats);
+
+      fillDob(data.dob, stats);
+
+      fillSelectOrRadio(FIELD_MAP.nationality, data.nationality || 'Bangladeshi', stats);
+      fillSelectOrRadio(FIELD_MAP.religion, data.religion, stats);
+      fillSelectOrRadio(FIELD_MAP.gender, data.gender, stats);
+
+      await fillYesNoWithDetails(FIELD_MAP.nid_has, FIELD_MAP.nid_no, data.nid_has, data.nid_no, stats);
+      await fillYesNoWithDetails(FIELD_MAP.breg_has, FIELD_MAP.breg_no, data.breg_has, data.breg_no, stats);
+      await fillYesNoWithDetails(FIELD_MAP.passport_has, FIELD_MAP.passport_no, data.passport_has, data.passport_no, stats);
+
+      if (data.marital_status) {
+        const maritalOk = fillSelectOrRadio(FIELD_MAP.marital_status, data.marital_status, stats);
+        if (maritalOk && normalizeText(data.marital_status) === 'married' && data.spouse_name) {
+          const spouseEl = await waitForVisibleAndEnabled(() => findFieldElement(FIELD_MAP.spouse_name));
+          fillTextField(spouseEl, data.spouse_name, stats);
         }
       }
-    }
 
-    if (data.dep_status) {
-      fillSelectOrRadio(FIELD_MAP.dep_status, data.dep_status, stats);
-    }
+      fillTextField(findFieldElement(FIELD_MAP.mobile), data.mobile, stats);
+      fillTextField(findFieldElement(FIELD_MAP.confirm_mobile), data.confirm_mobile || data.mobile, stats);
+      fillTextField(findFieldElement(FIELD_MAP.email), data.email, stats);
 
-    // Step 2: Address Information
-    showToast(`⏳ Step 2/4: Filling Addresses & waiting for Upazilas${label}...`, 'Handling District -> Upazila/P.S. dropdowns');
-
-    fillTextField(findFieldElement(FIELD_MAP.present_careof), data.present_careof, stats);
-    fillTextField(findFieldElement(FIELD_MAP.present_village), data.present_village, stats);
-
-    if (data.present_district) {
-      const presDistEl = findFieldElement(FIELD_MAP.present_district);
-      const distOk = selectOptionSmart(presDistEl, data.present_district, stats);
-      if (distOk && data.present_upazila) {
-        const presUpazilaEl = await waitForSelectOptions(
-          () => findFieldElement(FIELD_MAP.present_upazila),
-          data.present_upazila
-        );
-        selectOptionSmart(presUpazilaEl, data.present_upazila, stats);
-      }
-    }
-
-    fillTextField(findFieldElement(FIELD_MAP.present_post), data.present_post, stats);
-    fillTextField(findFieldElement(FIELD_MAP.present_postcode), data.present_postcode, stats);
-
-    const sameCheckbox = findFieldElement(FIELD_MAP.same_as_present);
-    if (data.same_as_present) {
-      if (sameCheckbox) {
-        toggleCheckbox(sameCheckbox, true);
-        markFilled(sameCheckbox);
-        stats.filledCount++;
-        await delay(250);
+      if (data.quota) {
+        const quotaOk = fillSelectOrRadio(FIELD_MAP.quota, data.quota, stats);
+        if (quotaOk && normalizeText(data.quota) !== 'not applicable' && data.quota_details) {
+          const quotaDetEl = await waitForVisibleAndEnabled(() => findFieldElement(FIELD_MAP.quota_details), 1200);
+          if (quotaDetEl && isElementInteractive(quotaDetEl)) {
+            fillTextField(quotaDetEl, data.quota_details, stats);
+          }
+        }
       }
 
-      // If permanent fields remain editable & empty (portal lacks JS auto-copy), populate from present data
-      const permCareEl = findFieldElement(FIELD_MAP.permanent_careof);
-      if (permCareEl && isElementInteractive(permCareEl) && !String(permCareEl.value || '').trim()) {
-        fillTextField(permCareEl, data.present_careof, stats);
-        fillTextField(findFieldElement(FIELD_MAP.permanent_village), data.present_village, stats);
-        if (data.present_district) {
-          const permDistOk = selectOptionSmart(findFieldElement(FIELD_MAP.permanent_district), data.present_district, stats);
-          if (permDistOk && data.present_upazila) {
-            const permUpazilaEl = await waitForSelectOptions(
+      if (data.dep_status) {
+        fillSelectOrRadio(FIELD_MAP.dep_status, data.dep_status, stats);
+      }
+
+      // Step 2: Address Information
+      showToast(`⏳ Step 2/4: Filling Addresses & waiting for Upazilas${label}...`, 'Handling District -> Upazila/P.S. dropdowns');
+
+      fillTextField(findFieldElement(FIELD_MAP.present_careof), data.present_careof, stats);
+      fillTextField(findFieldElement(FIELD_MAP.present_village), data.present_village, stats);
+
+      if (data.present_district) {
+        const presDistEl = findFieldElement(FIELD_MAP.present_district);
+        const distOk = selectOptionSmart(presDistEl, data.present_district, stats);
+        if (distOk && data.present_upazila) {
+          const presUpazilaEl = await waitForSelectOptions(
+            () => findFieldElement(FIELD_MAP.present_upazila),
+            data.present_upazila
+          );
+          selectOptionSmart(presUpazilaEl, data.present_upazila, stats);
+        }
+      }
+
+      fillTextField(findFieldElement(FIELD_MAP.present_post), data.present_post, stats);
+      fillTextField(findFieldElement(FIELD_MAP.present_postcode), data.present_postcode, stats);
+
+      const sameCheckbox = findFieldElement(FIELD_MAP.same_as_present);
+      if (data.same_as_present) {
+        if (sameCheckbox) {
+          toggleCheckbox(sameCheckbox, true);
+          markFilled(sameCheckbox, stats);
+          stats.filledCount++;
+          await delay(250);
+        }
+
+        // If permanent fields remain editable & empty (portal lacks JS auto-copy), populate from present data
+        const permCareEl = findFieldElement(FIELD_MAP.permanent_careof);
+        if (permCareEl && isElementInteractive(permCareEl) && !String(permCareEl.value || '').trim()) {
+          fillTextField(permCareEl, data.present_careof, stats);
+          fillTextField(findFieldElement(FIELD_MAP.permanent_village), data.present_village, stats);
+          if (data.present_district) {
+            const permDistOk = selectOptionSmart(findFieldElement(FIELD_MAP.permanent_district), data.present_district, stats);
+            if (permDistOk && data.present_upazila) {
+              const permUpazilaEl = await waitForSelectOptions(
+                () => findFieldElement(FIELD_MAP.permanent_upazila),
+                data.present_upazila
+              );
+              selectOptionSmart(permUpazilaEl, data.present_upazila, stats);
+            }
+          }
+          fillTextField(findFieldElement(FIELD_MAP.permanent_post), data.present_post, stats);
+          fillTextField(findFieldElement(FIELD_MAP.permanent_postcode), data.present_postcode, stats);
+        } else if (data.present_upazila) {
+          // Handle portals where same_as_present sets permanent_district and AJAX-loads permanent_upazila
+          const permUpazilaEl = findFieldElement(FIELD_MAP.permanent_upazila);
+          if (permUpazilaEl && isElementInteractive(permUpazilaEl) && !String(permUpazilaEl.value || '').trim()) {
+            const loadedUpazila = await waitForSelectOptions(
               () => findFieldElement(FIELD_MAP.permanent_upazila),
               data.present_upazila
             );
-            selectOptionSmart(permUpazilaEl, data.present_upazila, stats);
+            if (loadedUpazila && isElementInteractive(loadedUpazila)) {
+              selectOptionSmart(loadedUpazila, data.present_upazila, stats);
+            }
           }
         }
-        fillTextField(findFieldElement(FIELD_MAP.permanent_post), data.present_post, stats);
-        fillTextField(findFieldElement(FIELD_MAP.permanent_postcode), data.present_postcode, stats);
-      } else if (data.present_upazila) {
-        // Handle portals where same_as_present sets permanent_district and AJAX-loads permanent_upazila
-        const permUpazilaEl = findFieldElement(FIELD_MAP.permanent_upazila);
-        if (permUpazilaEl && isElementInteractive(permUpazilaEl) && !String(permUpazilaEl.value || '').trim()) {
-          const loadedUpazila = await waitForSelectOptions(
-            () => findFieldElement(FIELD_MAP.permanent_upazila),
-            data.present_upazila
-          );
-          if (loadedUpazila && isElementInteractive(loadedUpazila)) {
-            selectOptionSmart(loadedUpazila, data.present_upazila, stats);
+      } else {
+        if (sameCheckbox && sameCheckbox.checked) {
+          toggleCheckbox(sameCheckbox, false);
+          await delay(150);
+        }
+        fillTextField(findFieldElement(FIELD_MAP.permanent_careof), data.permanent_careof, stats);
+        fillTextField(findFieldElement(FIELD_MAP.permanent_village), data.permanent_village, stats);
+        if (data.permanent_district) {
+          const permDistEl = findFieldElement(FIELD_MAP.permanent_district);
+          const distOk = selectOptionSmart(permDistEl, data.permanent_district, stats);
+          if (distOk && data.permanent_upazila) {
+            const permUpazilaEl = await waitForSelectOptions(
+              () => findFieldElement(FIELD_MAP.permanent_upazila),
+              data.permanent_upazila
+            );
+            selectOptionSmart(permUpazilaEl, data.permanent_upazila, stats);
           }
         }
+        fillTextField(findFieldElement(FIELD_MAP.permanent_post), data.permanent_post, stats);
+        fillTextField(findFieldElement(FIELD_MAP.permanent_postcode), data.permanent_postcode, stats);
       }
-    } else {
-      if (sameCheckbox && sameCheckbox.checked) {
-        toggleCheckbox(sameCheckbox, false);
-        await delay(150);
+
+      // Step 3: Educational Qualifications
+      showToast(`⏳ Step 3/4: Filling Educational Qualifications${label}...`, 'Processing SSC, HSC, Graduation & Masters');
+
+      await fillEduBlock('ssc', data, stats);
+      await fillEduBlock('hsc', data, stats);
+      await fillHigherEduBlock('gra', Boolean(data.gra_applicable), data, stats);
+      await fillHigherEduBlock('mas', Boolean(data.mas_applicable), data, stats);
+
+      // Step 4: Job Experiences & Other Qualifications / Experiences
+      showToast(`⏳ Step 4/4: Filling Job & Other Experiences${label}...`, 'Processing work history & post-specific qualifications');
+
+      await fillJobExperiences(data, stats);
+      await fillOtherExperiences(data, stats);
+
+      // Highlight any empty required form inputs (excluding Captcha and declaration checkbox)
+      highlightMissingRequiredFields(stats);
+
+      const warningCount = stats.mismatchedElements.size;
+      const missingJobData = Boolean(stats.missingJobProfileData);
+      if (stats.filledCount === 0) {
+        showToast(
+          '⚠️ No Teletalk application fields detected',
+          'Open the full Teletalk application form page and try again.',
+          'warn',
+          8000
+        );
+      } else if (missingJobData) {
+        showToast(
+          `✅ Autofill Complete! Filled ${stats.filledCount} field(s).`,
+          '⚠️ "If Applicable" is checked in Job Experiences, but your profile has no Job Experience saved — open Extension Options to add it.',
+          'warn',
+          10500
+        );
+      } else if (warningCount > 0) {
+        showToast(
+          `✅ Autofill Complete! Filled ${stats.filledCount} field(s).`,
+          `⚠️ ${warningCount} field(s) highlighted in yellow (missing or unmatched info). Please review before submitting.`,
+          'info',
+          10000
+        );
+      } else {
+        showToast(
+          `✅ Autofill Complete! Filled ${stats.filledCount} field(s).`,
+          'Please review all entries and enter the Verification Code before submitting.',
+          'info',
+          9000
+        );
       }
-      fillTextField(findFieldElement(FIELD_MAP.permanent_careof), data.permanent_careof, stats);
-      fillTextField(findFieldElement(FIELD_MAP.permanent_village), data.permanent_village, stats);
-      if (data.permanent_district) {
-        const permDistEl = findFieldElement(FIELD_MAP.permanent_district);
-        const distOk = selectOptionSmart(permDistEl, data.permanent_district, stats);
-        if (distOk && data.permanent_upazila) {
-          const permUpazilaEl = await waitForSelectOptions(
-            () => findFieldElement(FIELD_MAP.permanent_upazila),
-            data.permanent_upazila
-          );
-          selectOptionSmart(permUpazilaEl, data.permanent_upazila, stats);
-        }
+
+      return {
+        ok: true,
+        filledCount: stats.filledCount,
+        warningCount,
+        missingJobProfileData: missingJobData
+      };
+    } finally {
+      if (typeof window !== 'undefined') {
+        window.__TJF_AUTOFILL_RUNNING__ = false;
       }
-      fillTextField(findFieldElement(FIELD_MAP.permanent_post), data.permanent_post, stats);
-      fillTextField(findFieldElement(FIELD_MAP.permanent_postcode), data.permanent_postcode, stats);
+      sectionContainerCache.clear();
     }
-
-    // Step 3: Educational Qualifications
-    showToast(`⏳ Step 3/4: Filling Educational Qualifications${label}...`, 'Processing SSC, HSC, Graduation & Masters');
-
-    await fillEduBlock('ssc', data, stats);
-    await fillEduBlock('hsc', data, stats);
-    await fillHigherEduBlock('gra', Boolean(data.gra_applicable), data, stats);
-    await fillHigherEduBlock('mas', Boolean(data.mas_applicable), data, stats);
-
-    // Step 4: Job Experiences & Other Qualifications / Experiences
-    showToast(`⏳ Step 4/4: Filling Job & Other Experiences${label}...`, 'Processing work history & post-specific qualifications');
-
-    await fillJobExperiences(data, stats);
-    await fillOtherExperiences(data, stats);
-
-    // Highlight any empty required form inputs (excluding Captcha and declaration checkbox)
-    highlightMissingRequiredFields(stats);
-
-    const warningCount = stats.mismatchedElements.size;
-    const missingJobData = Boolean(stats.missingJobProfileData);
-    if (stats.filledCount === 0) {
-      showToast(
-        '⚠️ No Teletalk application fields detected',
-        'Open the full Teletalk application form page and try again.',
-        'warn',
-        8000
-      );
-    } else if (missingJobData) {
-      showToast(
-        `✅ Autofill Complete! Filled ${stats.filledCount} field(s).`,
-        '⚠️ "If Applicable" is checked in Job Experiences, but your profile has no Job Experience saved — open Extension Options to add it.',
-        'warn',
-        10500
-      );
-    } else if (warningCount > 0) {
-      showToast(
-        `✅ Autofill Complete! Filled ${stats.filledCount} field(s).`,
-        `⚠️ ${warningCount} field(s) highlighted in yellow (missing or unmatched info). Please review before submitting.`,
-        'info',
-        10000
-      );
-    } else {
-      showToast(
-        `✅ Autofill Complete! Filled ${stats.filledCount} field(s).`,
-        'Please review all entries and enter the Verification Code before submitting.',
-        'info',
-        9000
-      );
-    }
-
-    return {
-      ok: true,
-      filledCount: stats.filledCount,
-      warningCount,
-      missingJobProfileData: missingJobData
-    };
   }
 
   if (
@@ -2151,7 +2419,10 @@
     if (typeof window !== 'undefined') {
       window.__TELETALK_JOBS_FILLER_LISTENER_BOUND__ = true;
     }
-    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (sender && sender.id && chrome.runtime && chrome.runtime.id && sender.id !== chrome.runtime.id) {
+        return false;
+      }
       if (!message || message.action !== 'TJF_AUTOFILL') {
         return false;
       }
@@ -2171,18 +2442,19 @@
   // Expose internal engine for automated verification scripts & hot re-injection
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
-      version: '1.1.2',
+      version: '1.2.0',
       autofillForm,
       findMatchingOption,
       selectOptionSmart,
       findFieldElement,
+      formatDobForTextInput,
       FIELD_MAP,
       normalizeText,
       compactText
     };
   } else if (typeof window !== 'undefined') {
     window.__TJF_ENGINE__ = {
-      version: '1.1.2',
+      version: '1.2.0',
       autofillForm,
       findMatchingOption,
       selectOptionSmart,

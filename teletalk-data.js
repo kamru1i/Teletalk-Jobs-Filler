@@ -571,8 +571,9 @@
     'Business/Self Employed'
   ];
 
+  const MAX_PASSING_YEAR = Math.max(2030, new Date().getFullYear() + 2);
   const PASSING_YEARS = [];
-  for (let y = 2030; y >= 1980; y--) {
+  for (let y = MAX_PASSING_YEAR; y >= 1975; y--) {
     PASSING_YEARS.push(String(y));
   }
 

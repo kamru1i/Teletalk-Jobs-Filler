@@ -4,6 +4,172 @@
   const STORAGE_KEY = 'tjf_state';
   const BACKUP_APP_ID = 'Teletalk Jobs Filler';
   const BACKUP_VERSION = 1;
+  const MAX_BACKUP_BYTES = 2 * 1024 * 1024; // 2 MB
+  const MAX_PROFILES = 50;
+  const MAX_JOBS_PER_PROFILE = 20;
+  const MAX_FIELD_LENGTH = 500;
+  const PBKDF2_ITERATIONS = 250000;
+
+  let writeQueue = Promise.resolve();
+
+  function enqueueWrite(taskFn) {
+    const next = writeQueue.then(taskFn, taskFn);
+    writeQueue = next.catch(() => {});
+    return next;
+  }
+
+  function clampString(val, maxLen = MAX_FIELD_LENGTH) {
+    if (val === undefined || val === null) return '';
+    return String(val).slice(0, maxLen);
+  }
+
+  function formatLocalDateIso(date = new Date()) {
+    const d = date instanceof Date ? date : new Date(date);
+    const yyyy = String(d.getFullYear());
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  function bytesToBase64(bytes) {
+    if (typeof btoa === 'function') {
+      let binary = '';
+      const chunkSize = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+      }
+      return btoa(binary);
+    }
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(bytes).toString('base64');
+    }
+    throw new Error('Base64 encoding is unavailable in this environment.');
+  }
+
+  function base64ToBytes(b64) {
+    if (typeof atob === 'function') {
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes;
+    }
+    if (typeof Buffer !== 'undefined') {
+      return new Uint8Array(Buffer.from(b64, 'base64'));
+    }
+    throw new Error('Base64 decoding is unavailable in this environment.');
+  }
+
+  function getWebCrypto() {
+    if (typeof globalThis !== 'undefined' && globalThis.crypto && globalThis.crypto.subtle) {
+      return globalThis.crypto;
+    }
+    return null;
+  }
+
+  async function deriveAesKey(cryptoApi, passphrase, salt, iterations, usages) {
+    const encoder = new TextEncoder();
+    const keyMaterial = await cryptoApi.subtle.importKey(
+      'raw',
+      encoder.encode(String(passphrase)),
+      { name: 'PBKDF2' },
+      false,
+      ['deriveKey']
+    );
+    return cryptoApi.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt,
+        iterations,
+        hash: 'SHA-256'
+      },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      usages
+    );
+  }
+
+  async function encryptTextAesGcm(plainText, passphrase) {
+    const cryptoApi = getWebCrypto();
+    if (!cryptoApi) {
+      throw new Error('Web Crypto API is unavailable for backup encryption.');
+    }
+    const salt = cryptoApi.getRandomValues(new Uint8Array(16));
+    const iv = cryptoApi.getRandomValues(new Uint8Array(12));
+    const key = await deriveAesKey(cryptoApi, passphrase, salt, PBKDF2_ITERATIONS, ['encrypt']);
+    const cipherBuf = await cryptoApi.subtle.encrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      new TextEncoder().encode(plainText)
+    );
+    return {
+      app: BACKUP_APP_ID,
+      version: BACKUP_VERSION,
+      encrypted: true,
+      cipher: 'AES-256-GCM',
+      kdf: 'PBKDF2-SHA256',
+      iterations: PBKDF2_ITERATIONS,
+      exportedAt: new Date().toISOString(),
+      salt: bytesToBase64(salt),
+      iv: bytesToBase64(iv),
+      ciphertext: bytesToBase64(new Uint8Array(cipherBuf))
+    };
+  }
+
+  async function decryptTextAesGcm(envelope, passphrase) {
+    const cryptoApi = getWebCrypto();
+    if (!cryptoApi) {
+      throw new Error('Web Crypto API is unavailable for backup decryption.');
+    }
+    const iter = Number(envelope.iterations);
+    if (!Number.isInteger(iter) || iter < 10000 || iter > 2000000) {
+      throw new Error('Encrypted backup has invalid key-derivation parameters.');
+    }
+    let salt;
+    let iv;
+    let cipherBytes;
+    try {
+      salt = base64ToBytes(String(envelope.salt || ''));
+      iv = base64ToBytes(String(envelope.iv || ''));
+      cipherBytes = base64ToBytes(String(envelope.ciphertext || ''));
+    } catch (_err) {
+      throw new Error('Encrypted backup data is malformed.');
+    }
+    if (salt.length < 8 || iv.length !== 12 || cipherBytes.length === 0) {
+      throw new Error('Encrypted backup metadata is invalid.');
+    }
+    try {
+      const key = await deriveAesKey(cryptoApi, passphrase, salt, iter, ['decrypt']);
+      const plainBuf = await cryptoApi.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        cipherBytes
+      );
+      return new TextDecoder().decode(plainBuf);
+    } catch (_err) {
+      const err = new Error('Incorrect backup password or corrupted encrypted file.');
+      err.code = 'INVALID_PASSWORD';
+      throw err;
+    }
+  }
+
+  function isEncryptedBackupJson(jsonString) {
+    try {
+      const parsed = JSON.parse(String(jsonString || ''));
+      return Boolean(
+        parsed &&
+        typeof parsed === 'object' &&
+        parsed.encrypted === true &&
+        typeof parsed.ciphertext === 'string' &&
+        typeof parsed.salt === 'string' &&
+        typeof parsed.iv === 'string'
+      );
+    } catch (_err) {
+      return false;
+    }
+  }
 
   const DEFAULT_JOB_EXPERIENCE_ITEM = {
     employment_type: '',
@@ -32,8 +198,8 @@
     const src = rawItem && typeof rawItem === 'object' ? rawItem : {};
     const out = {};
     for (const field of JOB_EXPERIENCE_STRING_KEYS) {
-      const val = src[field];
-      out[field] = val === undefined || val === null ? '' : String(val);
+      const maxLen = field === 'job_description' ? 300 : 200;
+      out[field] = clampString(src[field], maxLen);
     }
     const cw = src.currently_working;
     out.currently_working = cw === true || cw === 'true' || cw === 1 || cw === '1';
@@ -178,7 +344,7 @@
       const rawVal = source[key];
       if (key === 'job_experiences') {
         if (Array.isArray(rawVal) && rawVal.length > 0) {
-          normalized.job_experiences = rawVal.map(normalizeJobExperienceItem);
+          normalized.job_experiences = rawVal.slice(0, MAX_JOBS_PER_PROFILE).map(normalizeJobExperienceItem);
         } else {
           normalized.job_experiences = [{ ...DEFAULT_JOB_EXPERIENCE_ITEM }];
         }
@@ -194,7 +360,7 @@
       } else if (rawVal === undefined || rawVal === null) {
         normalized[key] = defVal;
       } else {
-        normalized[key] = String(rawVal);
+        normalized[key] = clampString(rawVal, MAX_FIELD_LENGTH);
       }
     }
 
@@ -222,7 +388,7 @@
   function createEmptyProfile(profileName = 'My Profile', seedData = null) {
     return {
       id: generateId(),
-      profileName: String(profileName || 'My Profile').trim() || 'My Profile',
+      profileName: clampString(String(profileName || 'My Profile').trim(), 60) || 'My Profile',
       updatedAt: new Date().toISOString(),
       data: normalizeProfileData(seedData)
     };
@@ -240,20 +406,21 @@
 
     const seenIds = new Set();
     const profiles = [];
-    for (let i = 0; i < rawState.profiles.length; i++) {
-      const item = rawState.profiles[i];
+    const sourceProfiles = rawState.profiles.slice(0, MAX_PROFILES);
+    for (let i = 0; i < sourceProfiles.length; i++) {
+      const item = sourceProfiles[i];
       if (!item || typeof item !== 'object') continue;
-      let id = typeof item.id === 'string' && item.id.trim() ? item.id.trim() : generateId();
+      let id = typeof item.id === 'string' && item.id.trim() ? clampString(item.id.trim(), 64) : generateId();
       if (seenIds.has(id)) {
         id = generateId();
       }
       seenIds.add(id);
 
       const profileName = typeof item.profileName === 'string' && item.profileName.trim()
-        ? item.profileName.trim()
+        ? clampString(item.profileName.trim(), 60)
         : `Profile ${profiles.length + 1}`;
       const updatedAt = typeof item.updatedAt === 'string' && item.updatedAt
-        ? item.updatedAt
+        ? clampString(item.updatedAt, 40)
         : new Date().toISOString();
       const rawData = item.data && typeof item.data === 'object' ? item.data : item;
       profiles.push({
@@ -327,19 +494,28 @@
     });
   }
 
-  async function getState() {
-    const raw = await storageGet(STORAGE_KEY);
-    const state = normalizeState(raw);
-    if (!raw || !Array.isArray(raw.profiles) || raw.profiles.length === 0) {
-      await storageSet(STORAGE_KEY, state);
-    }
-    return state;
-  }
-
-  async function saveState(nextState) {
+  async function saveStateInternal(nextState) {
     const normalized = normalizeState(nextState);
     await storageSet(STORAGE_KEY, normalized);
     return normalized;
+  }
+
+  async function getState() {
+    const raw = await storageGet(STORAGE_KEY);
+    if (!raw || !Array.isArray(raw.profiles) || raw.profiles.length === 0) {
+      return enqueueWrite(async () => {
+        const latest = await storageGet(STORAGE_KEY);
+        if (latest && Array.isArray(latest.profiles) && latest.profiles.length > 0) {
+          return normalizeState(latest);
+        }
+        return saveStateInternal(normalizeState(raw));
+      });
+    }
+    return normalizeState(raw);
+  }
+
+  async function saveState(nextState) {
+    return enqueueWrite(() => saveStateInternal(nextState));
   }
 
   async function getActiveProfile() {
@@ -348,71 +524,85 @@
   }
 
   async function setActiveProfile(profileId) {
-    const state = await getState();
-    const target = state.profiles.find((p) => p.id === profileId);
-    if (!target) {
-      throw new Error('Selected profile was not found.');
-    }
-    state.activeProfileId = target.id;
-    await saveState(state);
-    return target;
+    return enqueueWrite(async () => {
+      const state = normalizeState(await storageGet(STORAGE_KEY));
+      const target = state.profiles.find((p) => p.id === profileId);
+      if (!target) {
+        throw new Error('Selected profile was not found.');
+      }
+      state.activeProfileId = target.id;
+      await saveStateInternal(state);
+      return target;
+    });
   }
 
   async function createProfile(profileName, seedData = null) {
-    const state = await getState();
-    const cleanName = String(profileName || '').trim() || `Profile ${state.profiles.length + 1}`;
-    const newProfile = createEmptyProfile(cleanName, seedData);
-    state.profiles.push(newProfile);
-    state.activeProfileId = newProfile.id;
-    await saveState(state);
-    return { state, profile: newProfile };
+    return enqueueWrite(async () => {
+      const state = normalizeState(await storageGet(STORAGE_KEY));
+      if (state.profiles.length >= MAX_PROFILES) {
+        throw new Error(`Maximum limit of ${MAX_PROFILES} profiles reached.`);
+      }
+      const cleanName = clampString(String(profileName || '').trim(), 60) || `Profile ${state.profiles.length + 1}`;
+      const newProfile = createEmptyProfile(cleanName, seedData);
+      state.profiles.push(newProfile);
+      state.activeProfileId = newProfile.id;
+      await saveStateInternal(state);
+      return { state, profile: newProfile };
+    });
   }
 
   async function updateProfile(profileId, profileName, data) {
-    const state = await getState();
-    const idx = state.profiles.findIndex((p) => p.id === profileId);
-    if (idx === -1) {
-      throw new Error('Profile not found.');
-    }
-    const existing = state.profiles[idx];
-    const cleanName = String(profileName !== undefined ? profileName : existing.profileName).trim() || existing.profileName;
-    const updated = {
-      id: existing.id,
-      profileName: cleanName,
-      updatedAt: new Date().toISOString(),
-      data: normalizeProfileData(data !== undefined ? data : existing.data)
-    };
-    state.profiles[idx] = updated;
-    await saveState(state);
-    return { state, profile: updated };
+    return enqueueWrite(async () => {
+      const state = normalizeState(await storageGet(STORAGE_KEY));
+      const idx = state.profiles.findIndex((p) => p.id === profileId);
+      if (idx === -1) {
+        throw new Error('Profile not found.');
+      }
+      const existing = state.profiles[idx];
+      const cleanName = clampString(
+        String(profileName !== undefined ? profileName : existing.profileName).trim(),
+        60
+      ) || existing.profileName;
+      const updated = {
+        id: existing.id,
+        profileName: cleanName,
+        updatedAt: new Date().toISOString(),
+        data: normalizeProfileData(data !== undefined ? data : existing.data)
+      };
+      state.profiles[idx] = updated;
+      await saveStateInternal(state);
+      return { state, profile: updated };
+    });
   }
 
   async function deleteProfile(profileId) {
-    const state = await getState();
-    if (state.profiles.length <= 1) {
-      // Reset single remaining profile back to blank default rather than leaving zero profiles
-      const reset = createEmptyProfile('My Profile');
+    return enqueueWrite(async () => {
+      const state = normalizeState(await storageGet(STORAGE_KEY));
+      if (state.profiles.length <= 1) {
+        // Reset single remaining profile back to blank default rather than leaving zero profiles
+        const reset = createEmptyProfile('My Profile');
+        const next = {
+          version: BACKUP_VERSION,
+          activeProfileId: reset.id,
+          profiles: [reset]
+        };
+        await saveStateInternal(next);
+        return { state: next, resetOnly: true };
+      }
+
+      const filtered = state.profiles.filter((p) => p.id !== profileId);
+      if (filtered.length === state.profiles.length) {
+        throw new Error('Profile not found.');
+      }
+      const nextActive = state.activeProfileId === profileId ? filtered[0].id : state.activeProfileId;
       const next = {
         version: BACKUP_VERSION,
-        activeProfileId: reset.id,
-        profiles: [reset]
+        activeProfileId: nextActive,
+        profiles: filtered
       };
-      await saveState(next);
-      return { state: next, resetOnly: true };
-    }
-
-    const filtered = state.profiles.filter((p) => p.id !== profileId);
-    if (filtered.length === state.profiles.length) {
-      throw new Error('Profile not found.');
-    }
-    const nextActive = state.activeProfileId === profileId ? filtered[0].id : state.activeProfileId;
-    const next = {
-      version: BACKUP_VERSION,
-      activeProfileId: nextActive,
-      profiles: filtered
-    };
-    await saveState(next);
-    return { state: next, resetOnly: false };
+      await saveStateInternal(next);
+      return { state: next, resetOnly: false };
+    });
   }
 
   function countFilledFields(data) {
@@ -475,7 +665,7 @@
     return false;
   }
 
-  async function exportBackupJson() {
+  async function exportBackupJson(passphrase = '') {
     const state = await getState();
     const payload = {
       app: BACKUP_APP_ID,
@@ -484,19 +674,58 @@
       activeProfileId: state.activeProfileId,
       profiles: state.profiles
     };
-    return JSON.stringify(payload, null, 2);
+    const jsonText = JSON.stringify(payload, null, 2);
+    const pass = String(passphrase || '');
+    if (pass.length > 0) {
+      const encryptedEnvelope = await encryptTextAesGcm(jsonText, pass);
+      return JSON.stringify(encryptedEnvelope, null, 2);
+    }
+    return jsonText;
   }
 
-  async function importBackupJson(jsonString, mode = 'replace') {
+  function getUtf8ByteSize(str) {
+    if (typeof TextEncoder !== 'undefined') {
+      return new TextEncoder().encode(str).length;
+    }
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.byteLength(str, 'utf8');
+    }
+    return str.length * 2;
+  }
+
+  async function importBackupJson(jsonString, mode = 'replace', passphrase = '') {
+    const rawStr = String(jsonString || '');
+    if (getUtf8ByteSize(rawStr) > MAX_BACKUP_BYTES) {
+      throw new Error('Backup file is too large (max 2 MB allowed).');
+    }
+
     let parsed;
     try {
-      parsed = JSON.parse(String(jsonString || ''));
+      parsed = JSON.parse(rawStr);
     } catch (_err) {
       throw new Error('Invalid JSON file. Please choose a valid Teletalk Jobs Filler backup (.json) file.');
     }
 
     if (!parsed || typeof parsed !== 'object') {
       throw new Error('Backup file format is invalid.');
+    }
+
+    if (parsed.encrypted === true && typeof parsed.ciphertext === 'string') {
+      const pass = String(passphrase || '');
+      if (!pass) {
+        const err = new Error('This backup is password-protected. Please enter the decryption password.');
+        err.code = 'PASSWORD_REQUIRED';
+        throw err;
+      }
+      const decryptedJson = await decryptTextAesGcm(parsed, pass);
+      try {
+        parsed = JSON.parse(decryptedJson);
+      } catch (_err) {
+        throw new Error('Decrypted backup payload is not valid JSON.');
+      }
+      if (!parsed || typeof parsed !== 'object') {
+        throw new Error('Decrypted backup format is invalid.');
+      }
     }
 
     let importedProfiles = [];
@@ -508,22 +737,24 @@
       }
       importedProfiles = parsed.profiles
         .filter((p) => p && typeof p === 'object')
+        .slice(0, MAX_PROFILES)
         .map((p, idx) => ({
-          id: typeof p.id === 'string' && p.id.trim() ? p.id.trim() : generateId(),
+          id: typeof p.id === 'string' && p.id.trim() ? clampString(p.id.trim(), 64) : generateId(),
           profileName: typeof p.profileName === 'string' && p.profileName.trim()
-            ? p.profileName.trim()
+            ? clampString(p.profileName.trim(), 60)
             : `Imported Profile ${idx + 1}`,
-          updatedAt: typeof p.updatedAt === 'string' && p.updatedAt ? p.updatedAt : new Date().toISOString(),
+          updatedAt: typeof p.updatedAt === 'string' && p.updatedAt ? clampString(p.updatedAt, 40) : new Date().toISOString(),
           data: normalizeProfileData(p.data && typeof p.data === 'object' ? p.data : p)
         }));
-      importedActiveId = typeof parsed.activeProfileId === 'string' ? parsed.activeProfileId : null;
+      importedActiveId = typeof parsed.activeProfileId === 'string' ? clampString(parsed.activeProfileId, 64) : null;
     } else if (Array.isArray(parsed)) {
       importedProfiles = parsed
         .filter((p) => p && typeof p === 'object')
+        .slice(0, MAX_PROFILES)
         .map((p, idx) => ({
-          id: typeof p.id === 'string' && p.id.trim() ? p.id.trim() : generateId(),
+          id: typeof p.id === 'string' && p.id.trim() ? clampString(p.id.trim(), 64) : generateId(),
           profileName: typeof p.profileName === 'string' && p.profileName.trim()
-            ? p.profileName.trim()
+            ? clampString(p.profileName.trim(), 60)
             : `Imported Profile ${idx + 1}`,
           updatedAt: new Date().toISOString(),
           data: normalizeProfileData(p.data && typeof p.data === 'object' ? p.data : p)
@@ -543,33 +774,45 @@
       throw new Error('No valid profiles found in the backup file.');
     }
 
-    if (mode === 'append') {
-      const current = await getState();
-      const existingIds = new Set(current.profiles.map((p) => p.id));
-      for (const prof of importedProfiles) {
-        if (existingIds.has(prof.id)) {
-          prof.id = generateId();
+    return enqueueWrite(async () => {
+      if (mode === 'append') {
+        const current = normalizeState(await storageGet(STORAGE_KEY));
+        const existingIds = new Set(current.profiles.map((p) => p.id));
+        const slotsLeft = Math.max(0, MAX_PROFILES - current.profiles.length);
+        const toAppend = importedProfiles.slice(0, slotsLeft);
+        if (toAppend.length === 0) {
+          throw new Error(`Cannot merge: maximum limit of ${MAX_PROFILES} profiles is already saved.`);
         }
-        existingIds.add(prof.id);
-        current.profiles.push(prof);
+        for (const prof of toAppend) {
+          if (existingIds.has(prof.id)) {
+            prof.id = generateId();
+          }
+          existingIds.add(prof.id);
+          current.profiles.push(prof);
+        }
+        current.activeProfileId = toAppend[0].id;
+        const saved = await saveStateInternal(current);
+        return { state: saved, importedCount: toAppend.length };
       }
-      current.activeProfileId = importedProfiles[0].id;
-      const saved = await saveState(current);
-      return { state: saved, importedCount: importedProfiles.length };
-    }
 
-    const saved = await saveState({
-      version: BACKUP_VERSION,
-      activeProfileId: importedActiveId || importedProfiles[0].id,
-      profiles: importedProfiles
+      const saved = await saveStateInternal({
+        version: BACKUP_VERSION,
+        activeProfileId: importedActiveId || importedProfiles[0].id,
+        profiles: importedProfiles
+      });
+      return { state: saved, importedCount: importedProfiles.length };
     });
-    return { state: saved, importedCount: importedProfiles.length };
   }
 
   const TJFStorage = {
     STORAGE_KEY,
+    MAX_BACKUP_BYTES,
+    MAX_PROFILES,
+    MAX_JOBS_PER_PROFILE,
     DEFAULT_PROFILE_DATA,
     DEFAULT_JOB_EXPERIENCE_ITEM,
+    formatLocalDateIso,
+    isEncryptedBackupJson,
     normalizeJobExperienceItem,
     normalizeProfileData,
     createEmptyProfile,
